@@ -1,6 +1,13 @@
 import { useState, useEffect } from 'react';
 import { ChevronLeft, ChevronRight } from 'lucide-react';
-import { SliderImage } from '../lib/supabase';
+// ลบ import จาก supabase ออก
+
+// ประกาศ Type ขึ้นมาใหม่แทนของเดิม
+export type SliderImage = {
+  id: string | number;
+  image_url: string;
+  title?: string;
+};
 
 type ImageSliderProps = {
   images: SliderImage[];

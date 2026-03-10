@@ -1,8 +1,22 @@
 import { useEffect, useState } from 'react';
 import { UserCircle } from 'lucide-react';
-import { supabase, Place } from '../lib/supabase';
+// ลบ import { supabase, Place } from '../lib/supabase';
+import { fetchAPI } from '../lib/api';
 import { useAuth } from '../contexts/AuthContext';
 import { PlaceCard } from '../components/PlaceCard';
+
+// กำหนด Type โครงสร้างข้อมูล (เช่นเดิมครับ แนะนำให้ใช้ไฟล์ types.ts ในโปรเจกต์จริง)
+export type Place = {
+  id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  location?: string;
+  map_link?: string;
+  category: string;
+  is_recommended: boolean;
+  is_open: boolean;
+};
 
 type ProfilePageProps = {
   onPlaceClick: (placeId: string) => void;
@@ -27,34 +41,36 @@ export function ProfilePage({ onPlaceClick, onAuthRequired }: ProfilePageProps) 
 
     setLoading(true);
 
-    const { data: bookmarks } = await supabase
-      .from('bookmarks')
-      .select('place_id')
-      .eq('user_id', user.id);
-
-    if (bookmarks && bookmarks.length > 0) {
-      const placeIds = bookmarks.map(b => b.place_id);
-      const { data: places } = await supabase
-        .from('places')
-        .select('*')
-        .in('id', placeIds);
-
-      if (places) setBookmarkedPlaces(places);
+    try {
+      // ยิง API ไปที่ Endpoint ใหม่ที่สร้างขึ้นเพื่อดึงข้อมูลสถานที่ที่ Bookmark ไว้โดยเฉพาะ
+      // (Backend จะรู้ว่าเป็น User คนไหนจาก Cookie/Token ที่แนบไปอัตโนมัติ)
+      const places = await fetchAPI('/api/bookmarks/places');
+      
+      if (places) {
+        setBookmarkedPlaces(places);
+      }
+    } catch (error) {
+      console.error('Error loading bookmarked places:', error);
+    } finally {
+      setLoading(false);
     }
-
-    setLoading(false);
   };
 
   const handleBookmarkClick = async (placeId: string) => {
     if (!user) return;
 
-    await supabase
-      .from('bookmarks')
-      .delete()
-      .eq('user_id', user.id)
-      .eq('place_id', placeId);
+    try {
+      // ยิง API ยกเลิก Bookmark (ใช้ Method DELETE)
+      await fetchAPI(`/api/bookmarks/${placeId}`, {
+        method: 'DELETE',
+      });
 
-    setBookmarkedPlaces(prev => prev.filter(p => p.id !== placeId));
+      // อัปเดต UI ทันทีโดยลบสถานที่นั้นออกจาก State
+      setBookmarkedPlaces(prev => prev.filter(p => p.id !== placeId));
+    } catch (error) {
+      console.error('Error removing bookmark:', error);
+      alert('เกิดข้อผิดพลาดในการยกเลิกรายการโปรด');
+    }
   };
 
   const handleSignOut = async () => {
@@ -84,7 +100,7 @@ export function ProfilePage({ onPlaceClick, onAuthRequired }: ProfilePageProps) 
               </div>
               <div>
                 <h1 className="text-2xl font-bold text-gray-800">
-                  {user.email?.split('@')[0] || 'User'}
+                  {user.name || user.email?.split('@')[0] || 'User'}
                 </h1>
                 <p className="text-gray-600">{user.email}</p>
               </div>
@@ -112,6 +128,7 @@ export function ProfilePage({ onPlaceClick, onAuthRequired }: ProfilePageProps) 
               <PlaceCard
                 key={place.id}
                 place={place}
+                // กำหนดให้ isBookmarked เป็น true เสมอในหน้านี้ เพราะเป็นรายการที่คั่นไว้แล้ว
                 isBookmarked={true}
                 onBookmarkClick={handleBookmarkClick}
                 onClick={onPlaceClick}

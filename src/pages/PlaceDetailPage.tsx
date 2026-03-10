@@ -1,6 +1,21 @@
 import { useEffect, useState } from 'react';
 import { ArrowLeft, MapPin, Clock, ExternalLink } from 'lucide-react';
-import { supabase, Place } from '../lib/supabase';
+// ลบ import { supabase, Place } from '../lib/supabase';
+import { fetchAPI } from '../lib/api';
+
+// กำหนด Type ของ Place (แนะนำให้ใช้ร่วมกันจากไฟล์ types.ts ในโปรเจกต์จริง)
+export type Place = {
+  id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  location?: string;
+  map_link?: string;
+  category: string;
+  is_recommended: boolean;
+  is_open: boolean;
+  opening_hours?: Record<string, string>;
+};
 
 type PlaceDetailPageProps = {
   placeId: string;
@@ -17,14 +32,16 @@ export function PlaceDetailPage({ placeId, onBack }: PlaceDetailPageProps) {
 
   const loadPlace = async () => {
     setLoading(true);
-    const { data } = await supabase
-      .from('places')
-      .select('*')
-      .eq('id', placeId)
-      .maybeSingle();
-
-    if (data) setPlace(data);
-    setLoading(false);
+    try {
+      // ดึงข้อมูลสถานที่จาก API ของ Cloudflare Worker
+      const data = await fetchAPI(`/api/places/${placeId}`);
+      if (data) setPlace(data);
+    } catch (error) {
+      console.error('Error fetching place details:', error);
+      setPlace(null);
+    } finally {
+      setLoading(false);
+    }
   };
 
   if (loading) {
@@ -49,7 +66,8 @@ export function PlaceDetailPage({ placeId, onBack }: PlaceDetailPageProps) {
     );
   }
 
-  const openingHours = place.opening_hours as Record<string, string> || {};
+  // ป้องกัน error กรณีที่ opening_hours เป็น null หรือ undefined
+  const openingHours = place.opening_hours || {};
   const daysOfWeek = [
     { key: 'monday', label: 'จันทร์' },
     { key: 'tuesday', label: 'อังคาร' },

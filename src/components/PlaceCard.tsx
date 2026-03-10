@@ -1,5 +1,13 @@
 import { Star } from 'lucide-react';
-import { Place } from '../lib/supabase';
+// ลบ import { Place } from '../lib/supabase'; ออก
+
+// ประกาศ Type ขึ้นมาใหม่ (สามารถปรับเพิ่มฟิลด์ได้ตามฐานข้อมูล Cloudflare D1 ของคุณ)
+export type Place = {
+  id: string;
+  name: string;
+  description?: string | null;
+  image_url?: string | null;
+};
 
 type PlaceCardProps = {
   place: Place;

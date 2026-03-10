@@ -1,7 +1,29 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2, Edit2, Save, X } from 'lucide-react';
-import { supabase, Place, SliderImage } from '../lib/supabase';
 import { useAuth } from '../contexts/AuthContext';
+// เปลี่ยนจากการ import supabase มาเป็นการ import fetchAPI ที่เราสร้างไว้
+import { fetchAPI } from '../lib/api';
+
+// กำหนด Type โครงสร้างข้อมูล (สามารถแยกไปไว้ในไฟล์ types.ts ได้ถ้าต้องการใช้งานหลายที่)
+export type Place = {
+  id: string;
+  name: string;
+  description?: string;
+  image_url?: string;
+  location?: string;
+  map_link?: string;
+  category: string;
+  is_recommended: boolean;
+  is_open: boolean;
+};
+
+export type SliderImage = {
+  id: string;
+  image_url: string;
+  title?: string;
+  is_active: boolean;
+  order_index: number;
+};
 
 type AdminPageProps = {
   onAuthRequired: () => void;
@@ -23,63 +45,104 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
     loadData();
   }, [user]);
 
+  // ฟังก์ชันดึงข้อมูล (Read)
   const loadData = async () => {
-    const [placesRes, sliderRes] = await Promise.all([
-      supabase.from('places').select('*').order('created_at', { ascending: false }),
-      supabase.from('slider_images').select('*').order('order_index'),
-    ]);
+    try {
+      // ยิง API แบบ GET เพื่อดึงข้อมูลพร้อมกัน
+      const [placesRes, sliderRes] = await Promise.all([
+        fetchAPI('/api/places'),
+        fetchAPI('/api/sliders'),
+      ]);
 
-    if (placesRes.data) setPlaces(placesRes.data);
-    if (sliderRes.data) setSliderImages(sliderRes.data);
+      if (placesRes) setPlaces(placesRes);
+      if (sliderRes) setSliderImages(sliderRes);
+    } catch (error) {
+      console.error('Failed to load data:', error);
+      alert('ไม่สามารถดึงข้อมูลได้');
+    }
   };
 
+  // ฟังก์ชันบันทึกสถานที่ (Create / Update)
   const handleSavePlace = async () => {
     if (!editingPlace) return;
 
-    if (editingPlace.id) {
-      await supabase
-        .from('places')
-        .update(editingPlace)
-        .eq('id', editingPlace.id);
-    } else {
-      await supabase.from('places').insert(editingPlace);
-    }
+    try {
+      if (editingPlace.id) {
+        // อัปเดตข้อมูล (PUT)
+        await fetchAPI(`/api/places/${editingPlace.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(editingPlace),
+        });
+      } else {
+        // เพิ่มข้อมูลใหม่ (POST)
+        await fetchAPI('/api/places', {
+          method: 'POST',
+          body: JSON.stringify(editingPlace),
+        });
+      }
 
-    setEditingPlace(null);
-    loadData();
+      setEditingPlace(null);
+      loadData();
+    } catch (error) {
+      console.error('Failed to save place:', error);
+      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+    }
   };
 
+  // ฟังก์ชันลบสถานที่ (Delete)
   const handleDeletePlace = async (id: string) => {
     if (confirm('คุณแน่ใจหรือไม่ว่าต้องการลบสถานที่นี้?')) {
-      await supabase.from('places').delete().eq('id', id);
-      loadData();
+      try {
+        await fetchAPI(`/api/places/${id}`, { method: 'DELETE' });
+        loadData();
+      } catch (error) {
+        console.error('Failed to delete place:', error);
+        alert('เกิดข้อผิดพลาดในการลบข้อมูล');
+      }
     }
   };
 
+  // ฟังก์ชันบันทึกรูปสไลด์ (Create / Update)
   const handleSaveSlider = async () => {
     if (!editingSlider) return;
 
-    if (editingSlider.id) {
-      await supabase
-        .from('slider_images')
-        .update(editingSlider)
-        .eq('id', editingSlider.id);
-    } else {
-      const maxOrder = Math.max(...sliderImages.map(s => s.order_index), -1);
-      await supabase.from('slider_images').insert({
-        ...editingSlider,
-        order_index: maxOrder + 1,
-      });
-    }
+    try {
+      if (editingSlider.id) {
+        // อัปเดตข้อมูล (PUT)
+        await fetchAPI(`/api/sliders/${editingSlider.id}`, {
+          method: 'PUT',
+          body: JSON.stringify(editingSlider),
+        });
+      } else {
+        // เพิ่มข้อมูลใหม่ (POST)
+        const maxOrder = Math.max(...sliderImages.map(s => s.order_index), -1);
+        await fetchAPI('/api/sliders', {
+          method: 'POST',
+          body: JSON.stringify({
+            ...editingSlider,
+            order_index: maxOrder + 1,
+          }),
+        });
+      }
 
-    setEditingSlider(null);
-    loadData();
+      setEditingSlider(null);
+      loadData();
+    } catch (error) {
+      console.error('Failed to save slider:', error);
+      alert('เกิดข้อผิดพลาดในการบันทึกรูปสไลด์');
+    }
   };
 
+  // ฟังก์ชันลบรูปสไลด์ (Delete)
   const handleDeleteSlider = async (id: string) => {
     if (confirm('คุณแน่ใจหรือไม่ว่าต้องการลบภาพนี้?')) {
-      await supabase.from('slider_images').delete().eq('id', id);
-      loadData();
+      try {
+        await fetchAPI(`/api/sliders/${id}`, { method: 'DELETE' });
+        loadData();
+      } catch (error) {
+        console.error('Failed to delete slider:', error);
+        alert('เกิดข้อผิดพลาดในการลบรูปสไลด์');
+      }
     }
   };
 
