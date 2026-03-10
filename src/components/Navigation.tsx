@@ -12,7 +12,7 @@ type NavigationProps = {
 
 export function Navigation({ currentPage, onNavigate, onSearch, onAuthClick }: NavigationProps) {
   const [searchQuery, setSearchQuery] = useState('');
-  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false); // 2. เพิ่ม State สำหรับจัดการเปิด-ปิด Modal
+  const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
   const { user } = useAuth();
 
   const handleSearch = (e: React.FormEvent) => {
@@ -20,13 +20,10 @@ export function Navigation({ currentPage, onNavigate, onSearch, onAuthClick }: N
     onSearch(searchQuery);
   };
 
-  // 3. สร้างฟังก์ชันแยกเพื่อจัดการการคลิกปุ่มไอคอนรูปคน
   const handleUserClick = () => {
     if (user) {
-      // ถ้ามีผู้ใช้ล็อกอินอยู่แล้ว ให้เรียกใช้ onAuthClick (เช่น พาไปหน้าโปรไฟล์)
       onAuthClick();
     } else {
-      // ถ้ายังไม่ล็อกอิน ให้เปิดหน้าต่างเข้าสู่ระบบ
       setIsAuthModalOpen(true);
     }
   };
@@ -72,7 +69,7 @@ export function Navigation({ currentPage, onNavigate, onSearch, onAuthClick }: N
             </form>
 
             <button
-              onClick={handleUserClick} // 4. เปลี่ยนมาเรียกใช้ฟังก์ชันใหม่ที่เราเพิ่งสร้าง
+              onClick={handleUserClick}
               className="text-gray-700 hover:text-gray-800 transition-colors"
               title={user ? 'โปรไฟล์' : 'เข้าสู่ระบบ'}
             >
@@ -102,10 +99,9 @@ export function Navigation({ currentPage, onNavigate, onSearch, onAuthClick }: N
         </div>
       </div>
 
-      {/* 5. วาง Component AuthModal ไว้ด้านล่างสุด */}
-      <AuthModal 
-        isOpen={isAuthModalOpen} 
-        onClose={() => setIsAuthModalOpen(false)} 
+      <AuthModal
+        isOpen={isAuthModalOpen}
+        onClose={() => setIsAuthModalOpen(false)}
       />
     </div>
   );

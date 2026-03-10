@@ -11,7 +11,7 @@ type AuthContextType = {
 
 const AuthContext = createContext<AuthContextType | null>(null);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthModal({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<any | null>(null);
 
   // สมมติว่านี่คือ URL ของ Cloudflare Worker ของคุณ
