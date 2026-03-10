@@ -1,71 +1,105 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { useState } from 'react';
+import { X } from 'lucide-react';
+import { useAuth } from '../contexts/AuthContext'; // ดึง Hook จากไฟล์หลัก
 
-// กำหนด Type ตามที่คุณใช้งานจริง
-type AuthContextType = {
-  user: any | null;
-  signIn: (email: string, pass: string) => Promise<{ error: any }>;
-  signUp: (email: string, pass: string) => Promise<{ error: any }>;
-  signInWithGoogle: () => Promise<{ error: any }>;
-  logout: () => void;
+type AuthModalProps = {
+  isOpen: boolean;
+  onClose: () => void;
 };
 
-const AuthContext = createContext<AuthContextType | null>(null);
+export function AuthModal({ isOpen, onClose }: AuthModalProps) {
+  const [isLogin, setIsLogin] = useState(true);
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  
+  const { signIn, signUp, signInWithGoogle } = useAuth(); // เรียกใช้ Logic จาก Context
 
-export function AuthModal({ children }: { children: React.ReactNode }) {
-  const [user, setUser] = useState<any | null>(null);
+  if (!isOpen) return null;
 
-  // สมมติว่านี่คือ URL ของ Cloudflare Worker ของคุณ
-  const API_BASE_URL = 'https://your-api.your-domain.workers.dev';
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError(null);
+    
+    const result = isLogin 
+      ? await signIn(email, password) 
+      : await signUp(email, password);
 
-  // ตรวจสอบสถานะ User เมื่อโหลดหน้าเว็บ (เช่น ดึงจาก Token ใน LocalStorage หรือ Cookie)
-  useEffect(() => {
-    // โค้ดตรวจสอบ session ของคุณ
-  }, []);
-
-  // ฟังก์ชัน Login ปกติ
-  const signIn = async (email: string, pass: string) => {
-    // โค้ดยิง API ไปที่ Cloudflare Worker ของคุณ
-    return { error: null }; 
-  };
-
-  const signUp = async (email: string, pass: string) => {
-    // โค้ดยิง API ไปที่ Cloudflare Worker ของคุณ
-    return { error: null };
-  };
-
-  // ฟังก์ชันเข้าสู่ระบบด้วย Google
-  const signInWithGoogle = async () => {
-    try {
-      // หน้าเว็บที่คุณต้องการให้ระบบตีกลับมาหลังจาก Login Google เสร็จ
-      const redirectUri = window.location.origin; 
-
-      // ทำการ Redirect ผู้ใช้ไปยัง Endpoint ของ Cloudflare Worker
-      // จากนั้น Worker จะรับช่วงต่อในการพาผู้ใช้ไปหน้า Login ของ Google
-      window.location.href = `${API_BASE_URL}/auth/google?redirect_to=${encodeURIComponent(redirectUri)}`;
-
-      return { error: null };
-    } catch (error: any) {
-      return { error: error.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อระบบ Login' };
+    if (result.error) {
+      setError(result.error.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่');
+    } else {
+      onClose();
     }
   };
 
-  const logout = () => {
-    setUser(null);
-    // โค้ดลบ Token
+  const handleGoogleLogin = async () => {
+    const result = await signInWithGoogle();
+    if (result.error) {
+      setError(result.error instanceof Error ? result.error.message : 'Google Login Failed');
+    } else {
+      onClose();
+    }
   };
 
   return (
-    <AuthContext.Provider value={{ user, signIn, signUp, signInWithGoogle, logout }}>
-      {children}
-    </AuthContext.Provider>
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm">
+      <div className="relative w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+        <button onClick={onClose} className="absolute right-4 top-4 text-gray-400 hover:text-gray-600">
+          <X className="w-6 h-6" />
+        </button>
+
+        <h2 className="text-2xl font-bold text-center mb-8">
+          {isLogin ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
+        </h2>
+
+        {error && (
+          <div className="mb-4 p-3 bg-red-50 text-red-600 text-sm rounded-lg border border-red-100">
+            {error}
+          </div>
+        )}
+
+        <form onSubmit={handleSubmit} className="space-y-4">
+          <input
+            type="email"
+            placeholder="อีเมล"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+          />
+          <input
+            type="password"
+            placeholder="รหัสผ่าน"
+            className="w-full px-4 py-3 rounded-xl border border-gray-200 focus:ring-2 focus:ring-blue-500 outline-none"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            required
+          />
+          <button type="submit" className="w-full bg-blue-600 text-white py-3 rounded-xl font-semibold hover:bg-blue-700 transition-colors">
+            {isLogin ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
+          </button>
+        </form>
+
+        <div className="relative my-8">
+          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
+          <div className="relative flex justify-center text-sm"><span className="bg-white px-2 text-gray-500">หรือ</span></div>
+        </div>
+
+        <button 
+          onClick={handleGoogleLogin}
+          className="w-full flex items-center justify-center gap-3 border border-gray-200 py-3 rounded-xl hover:bg-gray-50 transition-colors"
+        >
+          <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
+          ดำเนินการต่อด้วย Google
+        </button>
+
+        <p className="mt-6 text-center text-sm text-gray-600">
+          {isLogin ? 'ยังไม่มีบัญชี?' : 'มีบัญชีอยู่แล้ว?'}
+          <button onClick={() => setIsLogin(!isLogin)} className="ml-2 text-blue-600 font-semibold hover:underline">
+            {isLogin ? 'สร้างบัญชีใหม่' : 'เข้าสู่ระบบที่นี่'}
+          </button>
+        </p>
+      </div>
+    </div>
   );
 }
-
-// Hook สำหรับดึงไปใช้ใน Component
-export const useAuth = () => {
-  const context = useContext(AuthContext);
-  if (!context) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
-  return context;
-};

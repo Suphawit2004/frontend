@@ -1,11 +1,9 @@
 import { useEffect, useState } from 'react';
-// ลบ import { supabase, Place, SliderImage } from '../lib/supabase';
 import { fetchAPI } from '../lib/api';
 import { ImageSlider } from '../components/ImageSlider';
 import { PlaceCard } from '../components/PlaceCard';
 import { useAuth } from '../contexts/AuthContext';
 
-// กำหนด Type โครงสร้างข้อมูล (แนะนำให้ย้ายไปไฟล์แยกเช่น types.ts แล้ว import เข้ามาเพื่อลดความซ้ำซ้อน)
 export type Place = {
   id: string;
   name: string;
@@ -52,24 +50,30 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
     }
   }, [searchQuery]);
 
-  // ฟังก์ชันดึงข้อมูลตอนโหลดหน้าแรก
   const loadData = async () => {
     setLoading(true);
 
     try {
-      // ดึงข้อมูล 3 ส่วนพร้อมกันผ่าน API ของ Cloudflare
       const [sliders, places, bookmarks] = await Promise.all([
-        fetchAPI('/api/sliders?active=true'), // สไลด์ที่เปิดใช้งาน
-        fetchAPI('/api/places?recommended=true&limit=4'), // สถานที่แนะนำ 4 แห่ง
-        // ดึงรายการโปรดเฉพาะตอนล็อกอิน (ใช้ .catch เพื่อไม่ให้กระทบส่วนอื่นถ้า API error)
+        fetchAPI('/api/sliders?active=true'),
+        fetchAPI('/api/places?recommended=true&limit=4'),
         user ? fetchAPI('/api/bookmarks').catch(() => []) : Promise.resolve([]), 
       ]);
 
-      if (sliders) setSliderImages(sliders);
-      if (places) setRecommendedPlaces(places);
-      if (bookmarks) {
-        setBookmarkedIds(new Set(bookmarks.map((b: { place_id: string }) => b.place_id)));
-      }
+      // ✅ เพิ่มการเช็ค Array ก่อนเซ็ตค่าให้ State
+      if (Array.isArray(sliders)) setSliderImages(sliders);
+      else if (sliders?.data && Array.isArray(sliders.data)) setSliderImages(sliders.data);
+      else setSliderImages([]);
+
+      if (Array.isArray(places)) setRecommendedPlaces(places);
+      else if (places?.data && Array.isArray(places.data)) setRecommendedPlaces(places.data);
+      else setRecommendedPlaces([]);
+
+      let bookmarkData = [];
+      if (Array.isArray(bookmarks)) bookmarkData = bookmarks;
+      else if (bookmarks?.data && Array.isArray(bookmarks.data)) bookmarkData = bookmarks.data;
+      
+      setBookmarkedIds(new Set(bookmarkData.map((b: { place_id: string }) => b.place_id)));
     } catch (error) {
       console.error('Error loading home page data:', error);
     } finally {
@@ -77,28 +81,32 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
     }
   };
 
-  // ฟังก์ชันดึงเฉพาะสถานที่แนะนำ 4 อันดับแรก
   const loadRecommendedPlaces = async () => {
     try {
       const places = await fetchAPI('/api/places?recommended=true&limit=4');
-      if (places) setRecommendedPlaces(places);
+      // ✅ เพิ่มการเช็ค Array
+      if (Array.isArray(places)) setRecommendedPlaces(places);
+      else if (places?.data && Array.isArray(places.data)) setRecommendedPlaces(places.data);
+      else setRecommendedPlaces([]);
     } catch (error) {
       console.error('Error loading recommended places:', error);
+      setRecommendedPlaces([]);
     }
   };
 
-  // ฟังก์ชันค้นหาสถานที่
   const searchPlaces = async (query: string) => {
     try {
-      // ส่ง query ไปให้ Backend ค้นหา (ilike แบบใน Supabase จะถูกจัดการที่ Cloudflare D1 แทน)
       const places = await fetchAPI(`/api/places?search=${encodeURIComponent(query)}&limit=4`);
-      if (places) setRecommendedPlaces(places);
+      // ✅ เพิ่มการเช็ค Array
+      if (Array.isArray(places)) setRecommendedPlaces(places);
+      else if (places?.data && Array.isArray(places.data)) setRecommendedPlaces(places.data);
+      else setRecommendedPlaces([]);
     } catch (error) {
       console.error('Error searching places:', error);
+      setRecommendedPlaces([]);
     }
   };
 
-  // ฟังก์ชันจัดการรายการโปรด (Bookmark)
   const handleBookmarkClick = async (placeId: string) => {
     if (!user) {
       onAuthRequired();
@@ -109,23 +117,17 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
 
     try {
       if (isBookmarked) {
-        // ยกเลิก Bookmark (DELETE)
-        await fetchAPI(`/api/bookmarks/${placeId}`, {
-          method: 'DELETE',
-        });
-
+        await fetchAPI(`/api/bookmarks/${placeId}`, { method: 'DELETE' });
         setBookmarkedIds(prev => {
           const next = new Set(prev);
           next.delete(placeId);
           return next;
         });
       } else {
-        // เพิ่ม Bookmark (POST)
         await fetchAPI('/api/bookmarks', {
           method: 'POST',
           body: JSON.stringify({ place_id: placeId }),
         });
-
         setBookmarkedIds(prev => new Set(prev).add(placeId));
       }
     } catch (error) {
@@ -142,9 +144,12 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
     );
   }
 
+  // ✅ ป้องกัน Slider พัง
+  const safeSliderImages = Array.isArray(sliderImages) ? sliderImages : [];
+
   return (
     <div>
-      <ImageSlider images={sliderImages} autoPlay={true} showArrows={true} />
+      <ImageSlider images={safeSliderImages} autoPlay={true} showArrows={true} />
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="text-center mb-8">
@@ -153,7 +158,8 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
           </h2>
         </div>
 
-        {recommendedPlaces.length === 0 ? (
+        {/* ✅ ป้องกัน Error ตอนเช็คความยาวข้อมูล */}
+        {!Array.isArray(recommendedPlaces) || recommendedPlaces.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-600">
               {searchQuery ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีสถานที่แนะนำ'}
@@ -162,7 +168,8 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {recommendedPlaces.map((place) => (
+              {/* ✅ เติม Array.isArray() && ป้องกันก่อน map */}
+              {Array.isArray(recommendedPlaces) && recommendedPlaces.map((place) => (
                 <PlaceCard
                   key={place.id}
                   place={place}

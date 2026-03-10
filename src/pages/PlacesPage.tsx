@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
-// ลบ import { supabase, Place } from '../lib/supabase';
 import { fetchAPI } from '../lib/api';
 import { PlaceCard } from '../components/PlaceCard';
 import { useAuth } from '../contexts/AuthContext';
 
-// กำหนด Type โครงสร้างข้อมูล (ถ้ามีไฟล์ types.ts สามารถ import มาแทนได้ครับ)
 export type Place = {
   id: string;
   name: string;
@@ -43,11 +41,9 @@ export function PlacesPage({ category = 'all', onPlaceClick, onAuthRequired, sea
   const loadPlaces = async () => {
     setLoading(true);
 
-    // สร้าง URL สำหรับดึงข้อมูลสถานที่
     let endpoint = '/api/places';
     const params = new URLSearchParams();
 
-    // เพิ่มเงื่อนไขการค้นหาหรือหมวดหมู่ลงใน URL
     if (searchQuery) {
       params.append('search', searchQuery);
     } else if (category !== 'all') {
@@ -60,18 +56,25 @@ export function PlacesPage({ category = 'all', onPlaceClick, onAuthRequired, sea
     }
 
     try {
-      // ดึงข้อมูลสถานที่และรายการโปรด (ถ้าล็อกอิน) พร้อมกัน
       const [placesRes, bookmarksRes] = await Promise.all([
         fetchAPI(endpoint),
         user ? fetchAPI('/api/bookmarks').catch(() => []) : Promise.resolve([]),
       ]);
 
-      if (placesRes) setPlaces(placesRes);
-      if (bookmarksRes) {
-        setBookmarkedIds(new Set(bookmarksRes.map((b: { place_id: string }) => b.place_id)));
-      }
+      // ✅ ป้องกัน Array ของสถานที่
+      if (Array.isArray(placesRes)) setPlaces(placesRes);
+      else if (placesRes?.data && Array.isArray(placesRes.data)) setPlaces(placesRes.data);
+      else setPlaces([]);
+
+      // ✅ ป้องกัน Array ของ Bookmarks
+      let bookmarkData = [];
+      if (Array.isArray(bookmarksRes)) bookmarkData = bookmarksRes;
+      else if (bookmarksRes?.data && Array.isArray(bookmarksRes.data)) bookmarkData = bookmarksRes.data;
+      
+      setBookmarkedIds(new Set(bookmarkData.map((b: { place_id: string }) => b.place_id)));
     } catch (error) {
       console.error('Error loading places:', error);
+      setPlaces([]);
     } finally {
       setLoading(false);
     }
@@ -87,23 +90,17 @@ export function PlacesPage({ category = 'all', onPlaceClick, onAuthRequired, sea
 
     try {
       if (isBookmarked) {
-        // ลบ Bookmark
-        await fetchAPI(`/api/bookmarks/${placeId}`, {
-          method: 'DELETE',
-        });
-
+        await fetchAPI(`/api/bookmarks/${placeId}`, { method: 'DELETE' });
         setBookmarkedIds(prev => {
           const next = new Set(prev);
           next.delete(placeId);
           return next;
         });
       } else {
-        // เพิ่ม Bookmark
         await fetchAPI('/api/bookmarks', {
           method: 'POST',
           body: JSON.stringify({ place_id: placeId }),
         });
-
         setBookmarkedIds(prev => new Set(prev).add(placeId));
       }
     } catch (error) {
@@ -129,7 +126,8 @@ export function PlacesPage({ category = 'all', onPlaceClick, onAuthRequired, sea
           </h1>
         </div>
 
-        {places.length === 0 ? (
+        {/* ✅ ป้องกัน Error ตอนเช็คความยาวข้อมูล */}
+        {!Array.isArray(places) || places.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-600">
               {searchQuery ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีสถานที่ในหมวดหมู่นี้'}
@@ -137,7 +135,8 @@ export function PlacesPage({ category = 'all', onPlaceClick, onAuthRequired, sea
           </div>
         ) : (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {places.map((place) => (
+            {/* ✅ เติม Array.isArray() && ป้องกันก่อน map */}
+            {Array.isArray(places) && places.map((place) => (
               <PlaceCard
                 key={place.id}
                 place={place}

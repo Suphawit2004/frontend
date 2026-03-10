@@ -1,10 +1,8 @@
 import { useEffect, useState } from 'react';
 import { Plus, Trash2, Edit2, Save, X } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
-// เปลี่ยนจากการ import supabase มาเป็นการ import fetchAPI ที่เราสร้างไว้
 import { fetchAPI } from '../lib/api';
 
-// กำหนด Type โครงสร้างข้อมูล (สามารถแยกไปไว้ในไฟล์ types.ts ได้ถ้าต้องการใช้งานหลายที่)
 export type Place = {
   id: string;
   name: string;
@@ -45,36 +43,39 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
     loadData();
   }, [user]);
 
-  // ฟังก์ชันดึงข้อมูล (Read)
   const loadData = async () => {
     try {
-      // ยิง API แบบ GET เพื่อดึงข้อมูลพร้อมกัน
       const [placesRes, sliderRes] = await Promise.all([
         fetchAPI('/api/places'),
         fetchAPI('/api/sliders'),
       ]);
 
-      if (placesRes) setPlaces(placesRes);
-      if (sliderRes) setSliderImages(sliderRes);
+      // ✅ เติมเกราะป้องกัน: ข้อมูลสถานที่ (Places)
+      if (Array.isArray(placesRes)) setPlaces(placesRes);
+      else if (placesRes?.data && Array.isArray(placesRes.data)) setPlaces(placesRes.data);
+      else setPlaces([]);
+
+      // ✅ เติมเกราะป้องกัน: ข้อมูลสไลด์ (Sliders)
+      if (Array.isArray(sliderRes)) setSliderImages(sliderRes);
+      else if (sliderRes?.data && Array.isArray(sliderRes.data)) setSliderImages(sliderRes.data);
+      else setSliderImages([]);
+
     } catch (error) {
       console.error('Failed to load data:', error);
       alert('ไม่สามารถดึงข้อมูลได้');
     }
   };
 
-  // ฟังก์ชันบันทึกสถานที่ (Create / Update)
   const handleSavePlace = async () => {
     if (!editingPlace) return;
 
     try {
       if (editingPlace.id) {
-        // อัปเดตข้อมูล (PUT)
         await fetchAPI(`/api/places/${editingPlace.id}`, {
           method: 'PUT',
           body: JSON.stringify(editingPlace),
         });
       } else {
-        // เพิ่มข้อมูลใหม่ (POST)
         await fetchAPI('/api/places', {
           method: 'POST',
           body: JSON.stringify(editingPlace),
@@ -89,7 +90,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
     }
   };
 
-  // ฟังก์ชันลบสถานที่ (Delete)
   const handleDeletePlace = async (id: string) => {
     if (confirm('คุณแน่ใจหรือไม่ว่าต้องการลบสถานที่นี้?')) {
       try {
@@ -102,20 +102,20 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
     }
   };
 
-  // ฟังก์ชันบันทึกรูปสไลด์ (Create / Update)
   const handleSaveSlider = async () => {
     if (!editingSlider) return;
 
     try {
       if (editingSlider.id) {
-        // อัปเดตข้อมูล (PUT)
         await fetchAPI(`/api/sliders/${editingSlider.id}`, {
           method: 'PUT',
           body: JSON.stringify(editingSlider),
         });
       } else {
-        // เพิ่มข้อมูลใหม่ (POST)
-        const maxOrder = Math.max(...sliderImages.map(s => s.order_index), -1);
+        // ✅ ป้องกัน Array ก่อนใช้ .map หา maxOrder
+        const safeSliders = Array.isArray(sliderImages) ? sliderImages : [];
+        const maxOrder = Math.max(...safeSliders.map(s => s.order_index), -1);
+        
         await fetchAPI('/api/sliders', {
           method: 'POST',
           body: JSON.stringify({
@@ -133,7 +133,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
     }
   };
 
-  // ฟังก์ชันลบรูปสไลด์ (Delete)
   const handleDeleteSlider = async (id: string) => {
     if (confirm('คุณแน่ใจหรือไม่ว่าต้องการลบภาพนี้?')) {
       try {
@@ -193,6 +192,7 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                   เพิ่มสถานที่ใหม่
                 </button>
 
+                {/* ส่วนของฟอร์มแก้ไขสถานที่ (ไม่เปลี่ยนแปลง) */}
                 {editingPlace && (
                   <div className="bg-gray-50 p-6 rounded-lg mb-6">
                     <h3 className="text-lg font-semibold mb-4">
@@ -284,7 +284,8 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                 )}
 
                 <div className="space-y-4">
-                  {places.map((place) => (
+                  {/* ✅ เติมเกราะป้องกัน: เช็ค Array ก่อน .map */}
+                  {Array.isArray(places) && places.map((place) => (
                     <div key={place.id} className="flex items-center justify-between border rounded-lg p-4">
                       <div className="flex-1">
                         <h4 className="font-semibold">{place.name}</h4>
@@ -325,6 +326,7 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                   เพิ่มภาพสไลด์
                 </button>
 
+                {/* ส่วนของฟอร์มแก้ไขสไลด์ (ไม่เปลี่ยนแปลง) */}
                 {editingSlider && (
                   <div className="bg-gray-50 p-6 rounded-lg mb-6">
                     <h3 className="text-lg font-semibold mb-4">
@@ -375,7 +377,8 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                 )}
 
                 <div className="space-y-4">
-                  {sliderImages.map((slider) => (
+                  {/* ✅ เติมเกราะป้องกัน: เช็ค Array ก่อน .map */}
+                  {Array.isArray(sliderImages) && sliderImages.map((slider) => (
                     <div key={slider.id} className="flex items-center justify-between border rounded-lg p-4">
                       <div className="flex items-center space-x-4">
                         <img

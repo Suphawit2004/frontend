@@ -1,9 +1,6 @@
 import { createContext, useContext, useEffect, useState } from 'react';
-// ลบ import { User } from '@supabase/supabase-js'; ออก
-// ลบ import { supabase } from '../lib/supabase'; ออก
-import { fetchAPI, API_BASE_URL } from '../lib/api'; 
+import { fetchAPI, API_BASE_URL } from '../lib/api'; // <--- เพิ่มการ import API_BASE_URL
 
-// สร้าง Type User ของเราเองขึ้นมาแทน
 export type User = {
   id: string;
   email: string;
@@ -11,7 +8,6 @@ export type User = {
   avatar_url?: string;
 };
 
-// เพิ่ม signInWithGoogle เข้าไปใน Context
 type AuthContextType = {
   user: User | null;
   loading: boolean;
@@ -27,23 +23,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // เปลี่ยนวิธีตรวจสอบ Session ตอนโหลดหน้าเว็บ
   useEffect(() => {
     const checkSession = async () => {
       try {
-        // ยิง API ไปหา Cloudflare Worker เพื่อเช็คว่ามี Cookie/Token ที่ยังไม่หมดอายุไหม
         const response = await fetchAPI('/api/auth/me');
         setUser(response.user || null);
       } catch (error) {
-        // ถ้า error (เช่น Token หมดอายุ หรือยังไม่ได้ล็อกอิน) ให้เซ็ต user เป็น null
         setUser(null);
       } finally {
         setLoading(false);
       }
     };
-
     checkSession();
-  }, []); // Custom API จะไม่มี onAuthStateChange แบบ Supabase เราจึงเช็คแค่ตอนโหลดแอพ
+  }, []);
 
   const signIn = async (email: string, password: string) => {
     try {
@@ -71,13 +63,33 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   };
 
-  // ฟังก์ชันใหม่สำหรับจัดการ Google Login ที่เรียกใช้จาก AuthModal
   const signInWithGoogle = async () => {
     try {
-      const redirectUri = window.location.origin;
-      // ให้เบราว์เซอร์ Redirect ไปหา Worker ของเรา แล้ว Worker จะพาไปหน้า Google ต่อ
-      window.location.href = `${API_BASE_URL}/auth/google?redirect_to=${encodeURIComponent(redirectUri)}`;
-      return { error: null };
+      // แก้ไขการต่อ URL ให้ใช้ API_BASE_URL ที่ import มา
+      // และเพิ่ม /api ให้ตรงกับโครงสร้าง endpoint อื่นๆ ของคุณ
+      const authUrl = `${API_BASE_URL}/api/auth/google?redirect_to=${encodeURIComponent(window.location.origin)}`;
+      
+      const popup = window.open(authUrl, 'google-auth', 'width=500,height=600');
+
+      if (!popup) {
+        throw new Error('Popup blocked');
+      }
+
+      return new Promise<{ error: Error | null }>((resolve) => {
+        const checkClosed = setInterval(() => {
+          if (popup.closed) {
+            clearInterval(checkClosed);
+            fetchAPI('/api/auth/me')
+              .then((response) => {
+                setUser(response.user || null);
+                resolve({ error: null });
+              })
+              .catch((error) => {
+                resolve({ error });
+              });
+          }
+        }, 1000);
+      });
     } catch (error: any) {
       return { error };
     }
@@ -85,12 +97,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   const signOut = async () => {
     try {
-      // เรียก API ไปลบ Cookie ที่ฝั่ง Backend ก่อน
       await fetchAPI('/api/auth/logout', { method: 'POST' });
     } catch (error) {
       console.error('Logout error:', error);
     } finally {
-      // เคลียร์ State ฝั่ง Frontend 
       setUser(null);
     }
   };
