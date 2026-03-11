@@ -1,12 +1,11 @@
-import { Star } from 'lucide-react';
-// ลบ import { Place } from '../lib/supabase'; ออก
+import { Star, MapPin } from 'lucide-react'; // 💡 เพิ่ม MapPin
 
-// ประกาศ Type ขึ้นมาใหม่ (สามารถปรับเพิ่มฟิลด์ได้ตามฐานข้อมูล Cloudflare D1 ของคุณ)
 export type Place = {
   id: string;
   name: string;
   description?: string | null;
   image_url?: string | null;
+  map_link?: string | null; // 💡 เพิ่มให้รองรับ map_link
 };
 
 type PlaceCardProps = {
@@ -18,7 +17,7 @@ type PlaceCardProps = {
 
 export function PlaceCard({ place, isBookmarked, onBookmarkClick, onClick }: PlaceCardProps) {
   return (
-    <div className="bg-white rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow">
+    <div className="bg-white rounded-lg overflow-hidden shadow-md hover:shadow-xl transition-shadow flex flex-col">
       <div
         onClick={() => onClick(place.id)}
         className="relative cursor-pointer"
@@ -50,14 +49,29 @@ export function PlaceCard({ place, isBookmarked, onBookmarkClick, onClick }: Pla
         </button>
       </div>
 
-      <div className="p-4">
-        <h3 className="font-semibold text-lg text-gray-800 line-clamp-2">
+      <div className="p-4 flex flex-col flex-grow">
+        <h3 className="font-semibold text-lg text-gray-800 line-clamp-1">
           {place.name}
         </h3>
         {place.description && (
           <p className="text-sm text-gray-600 mt-2 line-clamp-2">
             {place.description}
           </p>
+        )}
+
+        {/* 💡 เพิ่มปุ่มนำทาง (จะแสดงเมื่อมี map_link เท่านั้น) */}
+        {place.map_link && (
+          <div className="mt-4 pt-4 border-t border-gray-100">
+            <a
+              href={place.map_link}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()} // กันไม่ให้ไปเปิดหน้า Detail
+              className="flex items-center justify-center gap-2 w-full py-2 bg-blue-50 text-blue-600 rounded-md text-sm font-medium hover:bg-blue-100 transition-colors"
+            >
+              <MapPin className="w-4 h-4" /> ดูแผนที่ / นำทาง
+            </a>
+          </div>
         )}
       </div>
     </div>

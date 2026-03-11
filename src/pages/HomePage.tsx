@@ -4,6 +4,7 @@ import { ImageSlider } from '../components/ImageSlider';
 import { PlaceCard } from '../components/PlaceCard';
 import { useAuth } from '../contexts/AuthContext';
 
+// --- Types สำหรับข้อมูล ---
 export type Place = {
   id: string;
   name: string;
@@ -39,10 +40,12 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
   
   const { user } = useAuth();
 
+  // ดึงข้อมูลเบื้องต้นและ Bookmark
   useEffect(() => {
     loadData();
   }, [user]);
 
+  // ดึงข้อมูลสถานที่ (แนะนำ หรือ ค้นหา) เมื่อ searchQuery เปลี่ยน
   useEffect(() => {
     if (searchQuery) {
       searchPlaces(searchQuery);
@@ -54,27 +57,20 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
   const loadData = async () => {
     setLoading(true);
     try {
-      // 🟢 1. ดึงข้อมูลสไลด์ (Public)
+      // 1. ดึงข้อมูลสไลด์ (Public)
       const slidersRes = await fetchAPI('/api/sliders?active=true');
-      if (Array.isArray(slidersRes)) setSliderImages(slidersRes);
-      else if (slidersRes?.data) setSliderImages(slidersRes.data);
+      const sliderData = Array.isArray(slidersRes) ? slidersRes : (slidersRes?.data || []);
+      setSliderImages(sliderData);
 
-      // 🔴 2. ดึงข้อมูลบุ๊กมาร์ก (Private)
-      // 💡 เช็คจาก user เพื่อความชัวร์ว่าล็อกอินจริงๆ
+      // 2. ดึงข้อมูลบุ๊กมาร์ก (Private - เฉพาะตอนล็อกอิน)
       if (user) { 
         try {
           const bookmarksRes = await fetchAPI('/api/bookmarks');
           const data = Array.isArray(bookmarksRes) ? bookmarksRes : (bookmarksRes?.data || []);
-          
-          // 💡 แปลง Array เป็น Set เพื่อให้ตรงกับ State bookmarkedIds ของคุณ
-          const bookmarkSet = new Set<string>(data.map((b: any) => b.id));
+          const bookmarkSet = new Set<string>(data.map((b: any) => b.place_id || b.id));
           setBookmarkedIds(bookmarkSet);
-        } catch (bookmarkErr: any) {
-          console.warn('ไม่สามารถดึงข้อมูล Bookmark ได้:', bookmarkErr);
-          // ล้างตั๋วทิ้งถ้าหมดอายุ เพื่อไม่ให้ Console แดงค้าง
-          if (bookmarkErr.message?.includes('401') || bookmarkErr.message?.includes('Session')) {
-            localStorage.removeItem('auth_token');
-          }
+        } catch (bookmarkErr) {
+          console.warn('Cannot fetch bookmarks:', bookmarkErr);
         }
       } else {
         setBookmarkedIds(new Set());
@@ -82,16 +78,15 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
     } catch (error) {
       console.error('Failed to load home data:', error);
     } finally {
-      setLoading(false); // 💡 ต้องปิด loading ตรงนี้เพื่อให้หน้าเว็บแสดงผล
+      setLoading(false);
     }
   };
 
   const loadRecommendedPlaces = async () => {
     try {
       const places = await fetchAPI('/api/places?recommended=true&limit=4');
-      if (Array.isArray(places)) setRecommendedPlaces(places);
-      else if (places?.data && Array.isArray(places.data)) setRecommendedPlaces(places.data);
-      else setRecommendedPlaces([]);
+      const data = Array.isArray(places) ? places : (places?.data || []);
+      setRecommendedPlaces(data);
     } catch (error) {
       console.error('Error loading recommended places:', error);
       setRecommendedPlaces([]);
@@ -101,9 +96,8 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
   const searchPlaces = async (query: string) => {
     try {
       const places = await fetchAPI(`/api/places?search=${encodeURIComponent(query)}&limit=4`);
-      if (Array.isArray(places)) setRecommendedPlaces(places);
-      else if (places?.data && Array.isArray(places.data)) setRecommendedPlaces(places.data);
-      else setRecommendedPlaces([]);
+      const data = Array.isArray(places) ? places : (places?.data || []);
+      setRecommendedPlaces(data);
     } catch (error) {
       console.error('Error searching places:', error);
       setRecommendedPlaces([]);
@@ -117,7 +111,6 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
     }
 
     const isBookmarked = bookmarkedIds.has(placeId);
-
     try {
       if (isBookmarked) {
         await fetchAPI(`/api/bookmarks/${placeId}`, { method: 'DELETE' });
@@ -153,8 +146,11 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
   const safeSliderImages = Array.isArray(sliderImages) ? sliderImages : [];
 
   return (
-    <div>
-      <ImageSlider images={safeSliderImages} autoPlay={true} showArrows={true} />
+    <div className="min-h-screen bg-white">
+      {/* 💡 ส่วนแก้ไขสำคัญ: แสดง Slider เฉพาะเมื่อมีรูปภาพเท่านั้น */}
+      {safeSliderImages.length > 0 && (
+        <ImageSlider images={safeSliderImages} autoPlay={true} showArrows={true} />
+      )}
 
       <div className="max-w-7xl mx-auto px-4 py-8">
         <div className="text-center mb-8">
@@ -163,7 +159,7 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
           </h2>
         </div>
 
-        {!Array.isArray(recommendedPlaces) || recommendedPlaces.length === 0 ? (
+        {recommendedPlaces.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-600">
               {searchQuery ? 'ไม่พบผลการค้นหา' : 'ยังไม่มีสถานที่แนะนำ'}
@@ -172,7 +168,7 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {Array.isArray(recommendedPlaces) && recommendedPlaces.map((place) => (
+              {recommendedPlaces.map((place) => (
                 <PlaceCard
                   key={place.id}
                   place={place}
@@ -187,7 +183,7 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
               <div className="text-center mt-8">
                 <button
                   onClick={onMorePlacesClick}
-                  className="px-8 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium"
+                  className="px-8 py-3 bg-blue-600 text-white rounded-full hover:bg-blue-700 transition-colors font-medium shadow-sm"
                 >
                   ดูสถานที่เพิ่มเติม
                 </button>
