@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Edit2, Save, X } from 'lucide-react';
+import { Plus, Trash2, Edit2, Save, X, MapPin } from 'lucide-react'; // 💡 นำเข้า MapPin icon เพิ่ม
 import { useAuth } from '../contexts/AuthContext';
 import { fetchAPI } from '../lib/api';
 
@@ -34,10 +34,12 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
   const [editingPlace, setEditingPlace] = useState<Partial<Place> | null>(null);
   const [editingSlider, setEditingSlider] = useState<Partial<SliderImage> | null>(null);
   
-  // State สำหรับเก็บไฟล์รูปภาพ
-  const [selectedImage, setSelectedImage] = useState<File | null>(null); // ของสถานที่
-  const [selectedSliderImage, setSelectedSliderImage] = useState<File | null>(null); // 💡 ของสไลด์ (เพิ่มใหม่)
+  const [selectedImage, setSelectedImage] = useState<File | null>(null);
+  const [selectedSliderImage, setSelectedSliderImage] = useState<File | null>(null);
   
+  // 💡 State สำหรับจัดการปุ่มโหลดข้อมูล Google
+  const [isFetchingGoogle, setIsFetchingGoogle] = useState(false);
+
   const { user } = useAuth();
 
   useEffect(() => {
@@ -70,7 +72,41 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
   };
 
   // -----------------------------------------
-  // ส่วนจัดการสถานที่ (Places) - คงไว้เหมือนเดิมที่เราทำเสร็จแล้ว
+  // 💡 ฟังก์ชันดึงข้อมูลจาก Google Maps (ใหม่)
+  // -----------------------------------------
+  const handleFetchGoogleData = async () => {
+    if (!editingPlace?.map_link) {
+      alert('กรุณาวางลิงก์ Google Maps ในช่องก่อนครับ');
+      return;
+    }
+
+    setIsFetchingGoogle(true);
+    try {
+      // ⚠️ หมายเหตุ: เราต้องไปสร้าง API เส้นนี้ใน Backend เพื่อเรียก Google Places API
+      const response = await fetchAPI(`/api/places/fetch-google?url=${encodeURIComponent(editingPlace.map_link)}`);
+      
+      if (response && !response.error) {
+        setEditingPlace({
+          ...editingPlace,
+          name: response.name || editingPlace.name,
+          description: response.description || editingPlace.description,
+          location: response.location || editingPlace.location,
+          image_url: response.image_url || editingPlace.image_url,
+        });
+        alert('ดึงข้อมูลจาก Google Maps สำเร็จ!');
+      } else {
+        alert('ไม่สามารถดึงข้อมูลได้: ' + (response.error || 'ตรวจสอบลิงก์อีกครั้ง'));
+      }
+    } catch (error) {
+      console.error('Google Fetch Error:', error);
+      alert('เกิดข้อผิดพลาดในการดึงข้อมูลจาก Google Maps (อย่าลืมสร้าง API ฝั่ง Backend)');
+    } finally {
+      setIsFetchingGoogle(false);
+    }
+  };
+
+  // -----------------------------------------
+  // ส่วนจัดการสถานที่ (Places)
   // -----------------------------------------
   const handleSavePlace = async () => {
     if (!editingPlace) return;
@@ -88,6 +124,7 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
       if (editingPlace.image_url) formData.append('image_url', editingPlace.image_url);
       if (selectedImage) formData.append('image', selectedImage);
 
+      // ⚠️ อย่าลืมเปลี่ยน 127.0.0.1 ให้เป็น API_BASE_URL ถ้านำไปใช้งานจริง
       const url = editingPlace.id 
         ? `http://127.0.0.1:8787/api/places/${editingPlace.id}` 
         : `http://127.0.0.1:8787/api/places`;
@@ -118,42 +155,29 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
   };
 
   // -----------------------------------------
-  // 💡 ส่วนจัดการสไลด์ (Sliders) - อัปเกรดใหม่!
+  // ส่วนจัดการสไลด์ (Sliders)
   // -----------------------------------------
   const handleSaveSlider = async () => {
     if (!editingSlider) return;
     try {
-      // 1. สร้าง FormData
       const formData = new FormData();
       formData.append('title', editingSlider.title || '');
       formData.append('is_active', String(editingSlider.is_active !== false));
       
-      // ส่ง URL เก่าไปเผื่อกรณีไม่ได้อัปรูปใหม่
-      if (editingSlider.image_url) {
-        formData.append('image_url', editingSlider.image_url);
-      }
+      if (editingSlider.image_url) formData.append('image_url', editingSlider.image_url);
+      if (selectedSliderImage) formData.append('image', selectedSliderImage);
 
-      // 2. แนบไฟล์รูปภาพสไลด์
-      if (selectedSliderImage) {
-        formData.append('image', selectedSliderImage);
-      }
-
-      // 3. ยิง API แบบตรงๆ ไม่ผ่าน fetchAPI ปกติเพื่อเลี่ยง Header JSON
       const url = editingSlider.id 
         ? `http://127.0.0.1:8787/api/sliders/${editingSlider.id}` 
         : `http://127.0.0.1:8787/api/sliders`;
       const method = editingSlider.id ? 'PUT' : 'POST';
 
-      const response = await fetch(url, {
-        method: method,
-        body: formData,
-      });
+      const response = await fetch(url, { method, body: formData });
 
       if (!response.ok) throw new Error('บันทึกไม่สำเร็จ');
 
-      // ล้างค่าและโหลดข้อมูลใหม่
       setEditingSlider(null);
-      setSelectedSliderImage(null); // ล้างไฟล์ที่เลือกไว้
+      setSelectedSliderImage(null);
       loadData();
       alert('บันทึกสไลด์สำเร็จ!');
     } catch (error) {
@@ -201,7 +225,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
           </div>
 
           <div className="p-6">
-            {/* โค้ดส่วนแท็บ Places คงเดิม ผมซ่อนไว้เพื่อความกระชับ แต่ในไฟล์จริงมีครบครับ */}
             {activeTab === 'places' && (
               <div>
                 <button
@@ -216,12 +239,36 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                 </button>
 
                 {editingPlace && (
-                  <div className="bg-gray-50 p-6 rounded-lg mb-6">
+                  <div className="bg-gray-50 p-6 rounded-lg mb-6 border border-gray-200">
                     <h3 className="text-lg font-semibold mb-4">{editingPlace.id ? 'แก้ไขสถานที่' : 'เพิ่มสถานที่ใหม่'}</h3>
+                    
                     <div className="grid grid-cols-2 gap-4 mb-4">
+                      
+                      {/* 💡 ส่วนดึงข้อมูลอัตโนมัติจาก Google (ย้ายลิงก์ Map มาไว้ด้านบน) */}
+                      <div className="col-span-2 p-4 bg-blue-50 border border-blue-100 rounded-lg flex gap-2 items-end">
+                        <div className="flex-1">
+                          <label className="block text-sm font-medium text-blue-800 mb-1">Google Maps Link (เพื่อดึงข้อมูลอัตโนมัติ)</label>
+                          <input 
+                            type="text" 
+                            placeholder="วางลิงก์ Google Maps ที่นี่..." 
+                            value={editingPlace.map_link || ''} 
+                            onChange={(e) => setEditingPlace({ ...editingPlace, map_link: e.target.value })} 
+                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" 
+                          />
+                        </div>
+                        <button 
+                          type="button"
+                          onClick={handleFetchGoogleData}
+                          disabled={isFetchingGoogle || !editingPlace.map_link}
+                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center whitespace-nowrap"
+                        >
+                          <MapPin className="w-4 h-4 mr-2" />
+                          {isFetchingGoogle ? 'กำลังดึงข้อมูล...' : 'ดึงข้อมูล'}
+                        </button>
+                      </div>
+
                       <input type="text" placeholder="ชื่อสถานที่" value={editingPlace.name || ''} onChange={(e) => setEditingPlace({ ...editingPlace, name: e.target.value })} className="px-3 py-2 border rounded-lg" />
                       
-                      {/* ช่องอัปโหลดรูปสถานที่ */}
                       <div className="flex flex-col">
                         <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.length) setSelectedImage(e.target.files[0]); }} className="px-3 py-2 border rounded-lg bg-white" />
                         {editingPlace.image_url && !selectedImage && (
@@ -233,19 +280,21 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                       </div>
 
                       <textarea placeholder="รายละเอียด" value={editingPlace.description || ''} onChange={(e) => setEditingPlace({ ...editingPlace, description: e.target.value })} className="px-3 py-2 border rounded-lg col-span-2" rows={3} />
-                      <input type="text" placeholder="สถานที่ตั้ง" value={editingPlace.location || ''} onChange={(e) => setEditingPlace({ ...editingPlace, location: e.target.value })} className="px-3 py-2 border rounded-lg" />
-                      <input type="text" placeholder="Google Maps Link" value={editingPlace.map_link || ''} onChange={(e) => setEditingPlace({ ...editingPlace, map_link: e.target.value })} className="px-3 py-2 border rounded-lg" />
+                      <input type="text" placeholder="สถานที่ตั้ง (ที่อยู่)" value={editingPlace.location || ''} onChange={(e) => setEditingPlace({ ...editingPlace, location: e.target.value })} className="px-3 py-2 border rounded-lg col-span-2" />
+                      
                       <select value={editingPlace.category || 'all'} onChange={(e) => setEditingPlace({ ...editingPlace, category: e.target.value })} className="px-3 py-2 border rounded-lg">
                         <option value="all">ทั้งหมด</option>
                         <option value="nature">ธรรมชาติ</option>
                         <option value="cafe">คาเฟ่ ร้านอาหาร</option>
                       </select>
-                      <div className="flex items-center space-x-4">
-                        <label className="flex items-center"><input type="checkbox" checked={editingPlace.is_recommended || false} onChange={(e) => setEditingPlace({ ...editingPlace, is_recommended: e.target.checked })} className="mr-2" />แนะนำ</label>
-                        <label className="flex items-center"><input type="checkbox" checked={editingPlace.is_open !== false} onChange={(e) => setEditingPlace({ ...editingPlace, is_open: e.target.checked })} className="mr-2" />เปิด</label>
+                      
+                      <div className="flex items-center space-x-4 pl-2">
+                        <label className="flex items-center cursor-pointer"><input type="checkbox" checked={editingPlace.is_recommended || false} onChange={(e) => setEditingPlace({ ...editingPlace, is_recommended: e.target.checked })} className="mr-2 w-4 h-4 text-blue-600" />แนะนำ</label>
+                        <label className="flex items-center cursor-pointer"><input type="checkbox" checked={editingPlace.is_open !== false} onChange={(e) => setEditingPlace({ ...editingPlace, is_open: e.target.checked })} className="mr-2 w-4 h-4 text-blue-600" />เปิดให้บริการ</label>
                       </div>
                     </div>
-                    <div className="flex space-x-2">
+
+                    <div className="flex space-x-2 mt-6 border-t pt-4">
                       <button onClick={handleSavePlace} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"><Save className="w-4 h-4 mr-2" />บันทึก</button>
                       <button onClick={() => { setEditingPlace(null); setSelectedImage(null); }} className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"><X className="w-4 h-4 mr-2" />ยกเลิก</button>
                     </div>
@@ -254,17 +303,21 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
 
                 <div className="space-y-4">
                   {Array.isArray(places) && places.map((place) => (
-                    <div key={place.id} className="flex items-center justify-between border rounded-lg p-4">
+                    <div key={place.id} className="flex items-center justify-between border rounded-lg p-4 bg-white hover:shadow-sm transition-shadow">
                       <div className="flex-1 flex items-center space-x-4">
-                        {place.image_url && <img src={place.image_url} alt={place.name} className="w-16 h-16 object-cover rounded shadow-sm" />}
+                        {place.image_url ? (
+                          <img src={place.image_url} alt={place.name} className="w-16 h-16 object-cover rounded shadow-sm" />
+                        ) : (
+                          <div className="w-16 h-16 bg-gray-100 rounded flex items-center justify-center text-gray-400">No Img</div>
+                        )}
                         <div>
-                          <h4 className="font-semibold">{place.name}</h4>
-                          <p className="text-sm text-gray-600">{place.category} • {place.is_recommended && '⭐ แนะนำ'}</p>
+                          <h4 className="font-semibold text-gray-800">{place.name}</h4>
+                          <p className="text-sm text-gray-500">{place.category === 'nature' ? 'ธรรมชาติ' : place.category === 'cafe' ? 'คาเฟ่' : 'ทั่วไป'} • {place.is_recommended && <span className="text-yellow-500 font-medium">⭐ แนะนำ</span>}</p>
                         </div>
                       </div>
                       <div className="flex space-x-2">
-                        <button onClick={() => { setEditingPlace(place); setSelectedImage(null); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-4 h-4" /></button>
-                        <button onClick={() => handleDeletePlace(place.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
+                        <button onClick={() => { setEditingPlace(place); setSelectedImage(null); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded transition-colors"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={() => handleDeletePlace(place.id)} className="p-2 text-red-600 hover:bg-red-50 rounded transition-colors"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
                   ))}
@@ -272,122 +325,50 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
               </div>
             )}
 
-            {/* ----------------------------------------- */}
-            {/* 💡 แท็บสไลด์ (Sliders) */}
-            {/* ----------------------------------------- */}
             {activeTab === 'slider' && (
+              // ... โค้ดส่วน Slider คงเดิมทั้งหมด
               <div>
                 <button
-                  onClick={() => {
-                    setEditingSlider({ image_url: '', is_active: true });
-                    setSelectedSliderImage(null); // ล้างไฟล์ภาพ
-                  }}
+                  onClick={() => { setEditingSlider({ image_url: '', is_active: true }); setSelectedSliderImage(null); }}
                   className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 mb-6"
                 >
-                  <Plus className="w-5 h-5 mr-2" />
-                  เพิ่มภาพสไลด์
+                  <Plus className="w-5 h-5 mr-2" />เพิ่มภาพสไลด์
                 </button>
 
                 {editingSlider && (
-                  <div className="bg-gray-50 p-6 rounded-lg mb-6">
-                    <h3 className="text-lg font-semibold mb-4">
-                      {editingSlider.id ? 'แก้ไขภาพสไลด์' : 'เพิ่มภาพสไลด์ใหม่'}
-                    </h3>
+                  <div className="bg-gray-50 p-6 rounded-lg mb-6 border border-gray-200">
+                    <h3 className="text-lg font-semibold mb-4">{editingSlider.id ? 'แก้ไขภาพสไลด์' : 'เพิ่มภาพสไลด์ใหม่'}</h3>
                     <div className="space-y-4 mb-4">
-                      
-                      {/* 💡 เปลี่ยนจุดนี้ให้เป็นช่อง Upload File */}
                       <div className="flex flex-col">
                         <label className="text-sm font-medium text-gray-700 mb-1">เลือกรูปภาพสไลด์</label>
-                        <input
-                          type="file"
-                          accept="image/*"
-                          onChange={(e) => {
-                            if (e.target.files && e.target.files.length > 0) {
-                              setSelectedSliderImage(e.target.files[0]);
-                            }
-                          }}
-                          className="w-full px-3 py-2 border rounded-lg bg-white"
-                        />
-                        {/* แสดงรูปเก่า (ถ้ามี) */}
+                        <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.length) setSelectedSliderImage(e.target.files[0]); }} className="w-full px-3 py-2 border rounded-lg bg-white" />
                         {editingSlider.image_url && !selectedSliderImage && (
-                          <div className="mt-2 text-sm text-gray-500 flex items-center">
-                            <span className="mr-2">รูปปัจจุบัน:</span>
-                            <img src={editingSlider.image_url} alt="Current Slider" className="h-16 w-24 object-cover rounded shadow-sm" />
-                          </div>
+                          <div className="mt-2 text-sm text-gray-500 flex items-center"><span className="mr-2">รูปปัจจุบัน:</span><img src={editingSlider.image_url} alt="Current Slider" className="h-16 w-24 object-cover rounded shadow-sm" /></div>
                         )}
                       </div>
-
-                      <input
-                        type="text"
-                        placeholder="ชื่อ (ไม่บังคับ)"
-                        value={editingSlider.title || ''}
-                        onChange={(e) => setEditingSlider({ ...editingSlider, title: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-lg"
-                      />
-                      <label className="flex items-center">
-                        <input
-                          type="checkbox"
-                          checked={editingSlider.is_active !== false}
-                          onChange={(e) => setEditingSlider({ ...editingSlider, is_active: e.target.checked })}
-                          className="mr-2"
-                        />
-                        แสดง
-                      </label>
+                      <input type="text" placeholder="ชื่อ (ไม่บังคับ)" value={editingSlider.title || ''} onChange={(e) => setEditingSlider({ ...editingSlider, title: e.target.value })} className="w-full px-3 py-2 border rounded-lg" />
+                      <label className="flex items-center cursor-pointer"><input type="checkbox" checked={editingSlider.is_active !== false} onChange={(e) => setEditingSlider({ ...editingSlider, is_active: e.target.checked })} className="mr-2 w-4 h-4 text-blue-600" />แสดง</label>
                     </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={handleSaveSlider}
-                        className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                      >
-                        <Save className="w-4 h-4 mr-2" />
-                        บันทึก
-                      </button>
-                      <button
-                        onClick={() => {
-                          setEditingSlider(null);
-                          setSelectedSliderImage(null);
-                        }}
-                        className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        ยกเลิก
-                      </button>
+                    <div className="flex space-x-2 mt-4">
+                      <button onClick={handleSaveSlider} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"><Save className="w-4 h-4 mr-2" />บันทึก</button>
+                      <button onClick={() => { setEditingSlider(null); setSelectedSliderImage(null); }} className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"><X className="w-4 h-4 mr-2" />ยกเลิก</button>
                     </div>
                   </div>
                 )}
 
                 <div className="space-y-4">
                   {Array.isArray(sliderImages) && sliderImages.map((slider) => (
-                    <div key={slider.id} className="flex items-center justify-between border rounded-lg p-4">
+                    <div key={slider.id} className="flex items-center justify-between border rounded-lg p-4 bg-white">
                       <div className="flex items-center space-x-4">
-                        <img
-                          src={slider.image_url}
-                          alt={slider.title || 'Slider'}
-                          className="w-24 h-16 object-cover rounded shadow-sm"
-                        />
+                        <img src={slider.image_url} alt={slider.title || 'Slider'} className="w-24 h-16 object-cover rounded shadow-sm" />
                         <div>
-                          <h4 className="font-semibold">{slider.title || 'ไม่มีชื่อ'}</h4>
-                          <p className="text-sm text-gray-600">
-                            {slider.is_active ? '✓ แสดง' : '✗ ซ่อน'}
-                          </p>
+                          <h4 className="font-semibold text-gray-800">{slider.title || 'ไม่มีชื่อ'}</h4>
+                          <p className="text-sm text-gray-500">{slider.is_active ? '✓ แสดง' : '✗ ซ่อน'}</p>
                         </div>
                       </div>
                       <div className="flex space-x-2">
-                        <button
-                          onClick={() => {
-                            setEditingSlider(slider);
-                            setSelectedSliderImage(null); // เคลียร์รูปเก่าทิ้งตอนกดแก้ไข
-                          }}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeleteSlider(slider.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <button onClick={() => { setEditingSlider(slider); setSelectedSliderImage(null); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={() => handleDeleteSlider(slider.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
                   ))}

@@ -1,7 +1,7 @@
 // src/lib/api.ts
 
 // ✅ แบบที่ถูกต้อง: ไม่ต้องมี / ปิดท้าย
-export const API_BASE_URL = 'https://nai-dee.tiwsuphawit1.workers.dev'; 
+export const API_BASE_URL = 'https://nai-dee.tiwsuphawit1.workers.dev';
 
 export async function fetchAPI(endpoint: string, options: RequestInit = {}) {
   // ถ้า endpoint ที่ส่งมาคือ '/api/auth/signup' 

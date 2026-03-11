@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Routes, Route } from 'react-router-dom'; // 💡 นำเข้าเครื่องมือจัดการเส้นทาง
 import { AuthProvider } from './contexts/AuthContext';
 import { Navigation } from './components/Navigation';
 import { AuthModal } from './components/AuthModal';
@@ -8,31 +9,9 @@ import { PlaceDetailPage } from './pages/PlaceDetailPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
 
-type Page = 'home' | 'places' | 'nature' | 'cafe' | 'profile' | 'admin';
-
 function App() {
-  const [currentPage, setCurrentPage] = useState<Page>('home');
-  const [selectedPlaceId, setSelectedPlaceId] = useState<string | null>(null);
   const [showAuthModal, setShowAuthModal] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-
-  const handleNavigate = (page: string) => {
-    setCurrentPage(page as Page);
-    setSelectedPlaceId(null);
-    setSearchQuery('');
-  };
-
-  const handlePlaceClick = (placeId: string) => {
-    setSelectedPlaceId(placeId);
-  };
-
-  const handleBackFromDetail = () => {
-    setSelectedPlaceId(null);
-  };
-
-  const handleAuthClick = () => {
-    setCurrentPage('profile');
-  };
 
   const handleAuthRequired = () => {
     setShowAuthModal(true);
@@ -42,76 +21,62 @@ function App() {
     setSearchQuery(query);
   };
 
-  const renderPage = () => {
-    if (selectedPlaceId) {
-      return <PlaceDetailPage placeId={selectedPlaceId} onBack={handleBackFromDetail} />;
-    }
-
-    switch (currentPage) {
-      case 'home':
-        return (
-          <HomePage
-            onPlaceClick={handlePlaceClick}
-            onMorePlacesClick={() => handleNavigate('places')}
-            onAuthRequired={handleAuthRequired}
-            searchQuery={searchQuery}
-          />
-        );
-      case 'places':
-        return (
-          <PlacesPage
-            category="all"
-            onPlaceClick={handlePlaceClick}
-            onAuthRequired={handleAuthRequired}
-            searchQuery={searchQuery}
-          />
-        );
-      case 'nature':
-        return (
-          <PlacesPage
-            category="nature"
-            onPlaceClick={handlePlaceClick}
-            onAuthRequired={handleAuthRequired}
-            searchQuery={searchQuery}
-          />
-        );
-      case 'cafe':
-        return (
-          <PlacesPage
-            category="cafe"
-            onPlaceClick={handlePlaceClick}
-            onAuthRequired={handleAuthRequired}
-            searchQuery={searchQuery}
-          />
-        );
-      case 'profile':
-        return (
-          <ProfilePage
-            onPlaceClick={handlePlaceClick}
-            onAuthRequired={handleAuthRequired}
-          />
-        );
-      case 'admin':
-        return <AdminPage onAuthRequired={handleAuthRequired} />;
-      default:
-        return null;
-    }
-  };
-
   return (
     <AuthProvider>
       <div className="min-h-screen bg-gray-50">
         <Navigation
-          currentPage={currentPage}
-          onNavigate={handleNavigate}
           onSearch={handleSearch}
-          onAuthClick={handleAuthClick}
+          onAuthClick={() => setShowAuthModal(true)}
         />
-        {renderPage()}
+        
+        {/* 💡 เปลี่ยนจาก Switch-Case เป็น Routes มาตรฐาน */}
+        <Routes>
+          <Route path="/" element={
+            <HomePage 
+              onAuthRequired={handleAuthRequired} 
+              searchQuery={searchQuery}
+            />
+          } />
+          
+          <Route path="/places" element={
+            <PlacesPage 
+              category="all" 
+              onAuthRequired={handleAuthRequired} 
+              searchQuery={searchQuery}
+            />
+          } />
+
+          <Route path="/nature" element={
+            <PlacesPage 
+              category="nature" 
+              onAuthRequired={handleAuthRequired} 
+              searchQuery={searchQuery}
+            />
+          } />
+
+          <Route path="/cafe" element={
+            <PlacesPage 
+              category="cafe" 
+              onAuthRequired={handleAuthRequired} 
+              searchQuery={searchQuery}
+            />
+          } />
+
+          <Route path="/place/:id" element={
+            <PlaceDetailPage onBack={() => window.history.back()} />
+          } />
+
+          <Route path="/profile" element={
+            <ProfilePage onAuthRequired={handleAuthRequired} />
+          } />
+
+          {/* 🔒 หน้าสำหรับ Admin */}
+          <Route path="/admin" element={<AdminPage onAuthRequired={handleAuthRequired} />} />
+        </Routes>
+
         <AuthModal
           isOpen={showAuthModal}
           onClose={() => setShowAuthModal(false)}
-          onSuccess={() => setShowAuthModal(false)}
         />
       </div>
     </AuthProvider>

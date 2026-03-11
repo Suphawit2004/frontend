@@ -1,16 +1,13 @@
-import React from 'react'
-import ReactDOM from 'react-dom/client'
-import App from './App.tsx'
+import { StrictMode } from 'react'
+import { createRoot } from 'react-dom/client'
+import { BrowserRouter } from 'react-router-dom' // 💡 เพิ่มตัวนี้เข้ามา
 import './index.css'
+import App from './App.tsx'
 
-// 💡 1. นำเข้า BrowserRouter จาก react-router-dom
-import { BrowserRouter } from 'react-router-dom' 
-
-ReactDOM.createRoot(document.getElementById('root')!).render(
-  <React.StrictMode>
-    {/* 💡 2. เอา BrowserRouter มาครอบ Component <App /> เอาไว้ครับ */}
-    <BrowserRouter>
+createRoot(document.getElementById('root')!).render(
+  <StrictMode>
+    <BrowserRouter> {/* 💡 ครอบ App ไว้ที่นี่เพื่อให้ใช้ useNavigate ได้ */}
       <App />
     </BrowserRouter>
-  </React.StrictMode>,
+  </StrictMode>,
 )

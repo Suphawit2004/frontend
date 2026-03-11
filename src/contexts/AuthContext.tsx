@@ -1,9 +1,10 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { fetchAPI, API_BASE_URL } from '../lib/api'; 
+import { fetchAPI, API_BASE_URL } from '../lib/api';
 
 export type User = {
   id: string;
   email: string;
+  role: 'admin' | 'user';
   name?: string;
   avatar_url?: string;
 };
@@ -11,9 +12,9 @@ export type User = {
 type AuthContextType = {
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ error: Error | null }>;
-  signInWithGoogle: () => Promise<{ error: Error | null }>;
+  signIn: (email: string, password: string) => Promise<{ user: User | null; error: Error | null }>;
+  signUp: (email: string, password: string) => Promise<{ user: User | null; error: Error | null }>;
+  signInWithGoogle: () => Promise<{ user: User | null; error: Error | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -23,106 +24,71 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  // 1. ตรวจสอบ Session เมื่อเปิดเว็บ (ดึงข้อมูลจาก Cookie อัตโนมัติ)
   useEffect(() => {
-    const checkSession = async () => {
-      try {
-        const response = await fetchAPI('/api/auth/me');
-        // ถ้ามีข้อมูล user ส่งกลับมา แปลว่า Cookie ยังไม่หมดอายุ
-        if (response && response.user) {
-          setUser(response.user);
-        } else {
-          setUser(null);
-        }
-      } catch (error) {
-        setUser(null);
-      } finally {
-        setLoading(false);
-      }
-    };
-    checkSession();
+    fetchAPI('/api/auth/me')
+      .then(data => setUser(data.user || null))
+      .catch(() => setUser(null))
+      .finally(() => setLoading(false));
   }, []);
 
-  // 2. ฟังก์ชันเข้าสู่ระบบ
   const signIn = async (email: string, password: string) => {
     try {
-      const response = await fetchAPI('/api/auth/login', {
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-      
-      // ดักจับกรณี Backend ส่ง error กลับมา (เช่น รหัสผิด)
-      if (response.error) {
-        return { error: new Error(response.error) };
-      }
-
-      setUser(response.user);
-      return { error: null };
-    } catch (error: any) {
-      return { error: error instanceof Error ? error : new Error('เข้าสู่ระบบไม่สำเร็จ') };
-    }
+      const res = await fetchAPI('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
+      if (res.error) return { user: null, error: new Error(res.error) };
+      setUser(res.user);
+      return { user: res.user, error: null };
+    } catch (err: any) { return { user: null, error: err }; }
   };
 
-  // 3. ฟังก์ชันสมัครสมาชิก
   const signUp = async (email: string, password: string) => {
     try {
-      const response = await fetchAPI('/api/auth/signup', { // เปลี่ยนเป็น /signup ตามที่เราเขียนใน Backend
-        method: 'POST',
-        body: JSON.stringify({ email, password }),
-      });
-
-      if (response.error) {
-        return { error: new Error(response.error) };
-      }
-
-      setUser(response.user);
-      return { error: null };
-    } catch (error: any) {
-      return { error: error instanceof Error ? error : new Error('สมัครสมาชิกไม่สำเร็จ') };
-    }
+      const res = await fetchAPI('/api/auth/signup', { method: 'POST', body: JSON.stringify({ email, password }) });
+      if (res.error) return { user: null, error: new Error(res.error) };
+      setUser(res.user);
+      return { user: res.user, error: null };
+    } catch (err: any) { return { user: null, error: err }; }
   };
 
-  // 4. ฟังก์ชัน Google Login (คงโครงสร้างเดิมของคุณไว้ได้เลยครับ)
-  const signInWithGoogle = async () => {
-    try {
-      const authUrl = `${API_BASE_URL}/api/auth/google?redirect_to=${encodeURIComponent(window.location.origin)}`;
-      const popup = window.open(authUrl, 'google-auth', 'width=500,height=600');
+  const signInWithGoogle = () => {
+    return new Promise<{ user: User | null; error: Error | null }>((resolve) => {
+      const width = 500, height = 600;
+      const left = window.screenX + (window.outerWidth - width) / 2;
+      const top = window.screenY + (window.outerHeight - height) / 2;
+      
+      const popup = window.open(
+        `${API_BASE_URL}/api/auth/google`, 
+        'google-auth', 
+        `width=${width},height=${height},left=${left},top=${top}`
+      );
 
-      if (!popup) {
-        throw new Error('เบราว์เซอร์บล็อกหน้าต่าง Popup กรุณาอนุญาตให้แสดง Popup');
-      }
-
-      return new Promise<{ error: Error | null }>((resolve) => {
-        const checkClosed = setInterval(() => {
-          if (popup.closed) {
-            clearInterval(checkClosed);
-            fetchAPI('/api/auth/me')
-              .then((response) => {
-                setUser(response.user || null);
-                resolve({ error: null });
-              })
-              .catch((error) => {
-                resolve({ error });
-              });
+      const handleMessage = async (e: MessageEvent) => {
+        if (e.data === 'google-success') {
+          window.removeEventListener('message', handleMessage);
+          try {
+            const data = await fetchAPI('/api/auth/me');
+            setUser(data.user);
+            resolve({ user: data.user, error: null });
+          } catch (err: any) {
+            resolve({ user: null, error: err });
           }
-        }, 1000);
-      });
-    } catch (error: any) {
-      return { error };
-    }
+        }
+      };
+
+      window.addEventListener('message', handleMessage);
+
+      // ดักจับกรณีผู้ใช้กดปิด Popup ไปเอง
+      const checkClosed = setInterval(() => {
+        if (popup?.closed) {
+          clearInterval(checkClosed);
+          setTimeout(() => window.removeEventListener('message', handleMessage), 1000);
+        }
+      }, 500);
+    });
   };
 
-  // 5. ฟังก์ชันออกจากระบบ
   const signOut = async () => {
-    try {
-      // สั่ง Backend ให้ลบ Cookie ทิ้ง
-      await fetchAPI('/api/auth/logout', { method: 'POST' });
-    } catch (error) {
-      console.error('Logout error:', error);
-    } finally {
-      // ล้างข้อมูลฝั่งหน้าบ้าน
-      setUser(null);
-    }
+    await fetchAPI('/api/auth/logout', { method: 'POST' });
+    setUser(null);
   };
 
   return (
@@ -132,10 +98,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-export function useAuth() {
+export const useAuth = () => {
   const context = useContext(AuthContext);
-  if (context === undefined) {
-    throw new Error('useAuth must be used within an AuthProvider');
-  }
+  if (!context) throw new Error('useAuth must be used within AuthProvider');
   return context;
-}
+};
