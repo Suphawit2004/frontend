@@ -9,6 +9,9 @@ import { PlaceDetailPage } from './pages/PlaceDetailPage';
 import { ProfilePage } from './pages/ProfilePage';
 import { AdminPage } from './pages/AdminPage';
 
+// 💡 1. นำเข้า ProtectedRoute และ AdminMediaPage ที่เราสร้างไว้
+import { ProtectedRoute } from './components/ProtectedRoute';
+import { AdminMediaPage } from './pages/AdminMediaPage';
 
 function App() {
   const [showAuthModal, setShowAuthModal] = useState(false);
@@ -30,8 +33,8 @@ function App() {
           onAuthClick={() => setShowAuthModal(true)}
         />
         
-        {/* 💡 เปลี่ยนจาก Switch-Case เป็น Routes มาตรฐาน */}
         <Routes>
+          {/* 🟢 หน้าทั่วไป (ใครก็เข้าดูได้) */}
           <Route path="/" element={
             <HomePage 
               onAuthRequired={handleAuthRequired} 
@@ -67,12 +70,30 @@ function App() {
             <PlaceDetailPage onBack={() => window.history.back()} />
           } />
 
+          {/* 🟡 หน้าโปรไฟล์ (ถ้าอยากให้กันหลุดด้วย สามารถเอา <ProtectedRoute> มาครอบได้นะครับ แต่ตอนนี้คงเดิมไว้ก่อน) */}
           <Route path="/profile" element={
             <ProfilePage onAuthRequired={handleAuthRequired} />
           } />
 
-          {/* 🔒 หน้าสำหรับ Admin */}
-          <Route path="/admin" element={<AdminPage onAuthRequired={handleAuthRequired} />} />
+          {/* 🔴 หน้าสำหรับ Admin (ใส่ยาม ProtectedRoute มาเฝ้าไว้แล้ว!) */}
+          <Route 
+            path="/admin" 
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <AdminPage onAuthRequired={handleAuthRequired} />
+              </ProtectedRoute>
+            } 
+          />
+
+          {/* 🔴 หน้าคลังสื่อสำหรับ Admin */}
+          <Route 
+            path="/admin/media" 
+            element={
+              <ProtectedRoute requireAdmin={true}>
+                <AdminMediaPage />
+              </ProtectedRoute>
+            } 
+          />
         </Routes>
 
         <AuthModal

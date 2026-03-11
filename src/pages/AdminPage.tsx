@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Edit2, Save, X, MapPin, Image as ImageIcon } from 'lucide-react'; // 💡 นำเข้า ImageIcon เพิ่ม
+import { Plus, Trash2, Edit2, Save, X, Image as ImageIcon } from 'lucide-react'; 
 import { useAuth } from '../contexts/AuthContext';
 import { fetchAPI, API_BASE_URL } from '../lib/api';
 
@@ -36,8 +36,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
   
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [selectedSliderImage, setSelectedSliderImage] = useState<File | null>(null);
-  
-  const [isFetchingGoogle, setIsFetchingGoogle] = useState(false);
 
   const { user } = useAuth();
 
@@ -70,38 +68,8 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
     }
   };
 
-  const handleFetchGoogleData = async () => {
-    if (!editingPlace?.map_link) {
-      alert('กรุณาวางลิงก์ Google Maps ในช่องก่อนครับ');
-      return;
-    }
-
-    setIsFetchingGoogle(true);
-    try {
-      const response = await fetchAPI(`/api/places/fetch-google?url=${encodeURIComponent(editingPlace.map_link)}`);
-      
-      if (response && !response.error) {
-        setEditingPlace({
-          ...editingPlace,
-          name: response.name || editingPlace.name,
-          description: response.description || editingPlace.description,
-          location: response.location || editingPlace.location,
-          image_url: response.image_url || editingPlace.image_url,
-        });
-        alert('ดึงข้อมูลจาก Google Maps สำเร็จ!');
-      } else {
-        alert('ไม่สามารถดึงข้อมูลได้: ' + (response.error || 'ตรวจสอบลิงก์อีกครั้ง'));
-      }
-    } catch (error) {
-      console.error('Google Fetch Error:', error);
-      alert('เกิดข้อผิดพลาดในการดึงข้อมูลจาก Google Maps');
-    } finally {
-      setIsFetchingGoogle(false);
-    }
-  };
-
   // -----------------------------------------
-  // 💡 โค้ดใหม่: ฟังก์ชันดึงรูปจากคลังสื่อ (localStorage)
+  // 💡 ฟังก์ชันดึงรูปจากคลังสื่อ (localStorage)
   // -----------------------------------------
   const applySelectedImage = (type: 'place' | 'slider') => {
     const savedUrl = localStorage.getItem('selected_image_url');
@@ -145,9 +113,15 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
         
       const method = editingPlace.id ? 'PUT' : 'POST';
 
+      // 💡 ดึงตั๋ว (Token) จากเครื่องเพื่อแนบไปกับคำขอ
+      const token = localStorage.getItem('auth_token');
+
       const response = await fetch(url, { 
         method, 
         body: formData,
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         credentials: 'include' 
       });
 
@@ -155,7 +129,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
       setEditingPlace(null);
       setSelectedImage(null);
       
-      // ล้างค่ารูปที่เลือกไว้หลังจากบันทึกเสร็จ (Option)
       localStorage.removeItem('selected_image_url');
       
       loadData();
@@ -196,9 +169,15 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
         
       const method = editingSlider.id ? 'PUT' : 'POST';
 
+      // 💡 ดึงตั๋ว (Token) จากเครื่องเพื่อแนบไปกับคำขอ
+      const token = localStorage.getItem('auth_token');
+
       const response = await fetch(url, { 
         method, 
         body: formData,
+        headers: {
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
         credentials: 'include' 
       });
 
@@ -207,7 +186,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
       setEditingSlider(null);
       setSelectedSliderImage(null);
       
-      // ล้างค่ารูปที่เลือกไว้หลังจากบันทึกเสร็จ (Option)
       localStorage.removeItem('selected_image_url');
       
       loadData();
@@ -277,31 +255,23 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                     
                     <div className="grid grid-cols-2 gap-4 mb-4">
                       
-                      <div className="col-span-2 p-4 bg-blue-50 border border-blue-100 rounded-lg flex gap-2 items-end">
-                        <div className="flex-1">
-                          <label className="block text-sm font-medium text-blue-800 mb-1">Google Maps Link (เพื่อดึงข้อมูลอัตโนมัติ)</label>
-                          <input 
-                            type="text" 
-                            placeholder="วางลิงก์ Google Maps ที่นี่..." 
-                            value={editingPlace.map_link || ''} 
-                            onChange={(e) => setEditingPlace({ ...editingPlace, map_link: e.target.value })} 
-                            className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500" 
-                          />
-                        </div>
-                        <button 
-                          type="button"
-                          onClick={handleFetchGoogleData}
-                          disabled={isFetchingGoogle || !editingPlace.map_link}
-                          className="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50 flex items-center whitespace-nowrap"
-                        >
-                          <MapPin className="w-4 h-4 mr-2" />
-                          {isFetchingGoogle ? 'กำลังดึงข้อมูล...' : 'ดึงข้อมูล'}
-                        </button>
+                      {/* 💡 ช่องกรอกลิงก์ Google Maps สำหรับนำทางแบบเรียบง่าย */}
+                      <div className="col-span-2">
+                        <label className="block text-sm font-medium text-gray-700 mb-1">
+                          ลิงก์ Google Maps (สำหรับปุ่มนำทาง)
+                        </label>
+                        <input 
+                          type="text" 
+                          placeholder="ตัวอย่าง: https://maps.app.goo.gl/..." 
+                          value={editingPlace.map_link || ''} 
+                          onChange={(e) => setEditingPlace({ ...editingPlace, map_link: e.target.value })} 
+                          className="w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none" 
+                        />
                       </div>
 
                       <input type="text" placeholder="ชื่อสถานที่" value={editingPlace.name || ''} onChange={(e) => setEditingPlace({ ...editingPlace, name: e.target.value })} className="px-3 py-2 border rounded-lg col-span-2 md:col-span-1" />
                       
-                      {/* 💡 โค้ดใหม่: ส่วนจัดการรูปภาพ Places */}
+                      {/* ส่วนจัดการรูปภาพ Places */}
                       <div className="col-span-2 md:col-span-1 border rounded-lg p-3 bg-white flex flex-col gap-2">
                         <label className="text-sm font-medium text-gray-700">รูปภาพสถานที่</label>
                         
@@ -397,7 +367,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                     <h3 className="text-lg font-semibold mb-4">{editingSlider.id ? 'แก้ไขภาพสไลด์' : 'เพิ่มภาพสไลด์ใหม่'}</h3>
                     <div className="space-y-4 mb-4">
                       
-                      {/* 💡 โค้ดใหม่: ส่วนจัดการรูปภาพ Sliders */}
                       <div className="flex flex-col border rounded-lg p-3 bg-white gap-2">
                         <label className="text-sm font-medium text-gray-700">รูปภาพสไลด์</label>
                         

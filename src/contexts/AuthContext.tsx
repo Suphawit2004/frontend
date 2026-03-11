@@ -1,67 +1,56 @@
-import React, { createContext, useContext, useEffect, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { fetchAPI } from '../lib/api';
 
-export type User = {
-  id: string;
-  email: string;
-  role: 'admin' | 'user';
-  name?: string;
-  avatar_url?: string;
-};
+export type User = { id: string; email: string; name?: string; role?: string; avatar_url?: string; };
 
 type AuthContextType = {
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<{ user: User | null; error: Error | null }>;
-  signUp: (email: string, password: string) => Promise<{ user: User | null; error: Error | null }>;
-  signOut: () => Promise<void>;
+  login: (userData: User, token: string) => void; // 💡 รับพารามิเตอร์ token เพิ่ม
+  logout: () => void;
 };
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
-export function AuthProvider({ children }: { children: React.ReactNode }) {
+export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    fetchAPI('/api/auth/me')
-      .then(data => setUser(data.user || null))
-      .catch(() => setUser(null))
-      .finally(() => setLoading(false));
-  }, []);
+  useEffect(() => { checkLoginStatus(); }, []);
 
-  const signIn = async (email: string, password: string) => {
+  const checkLoginStatus = async () => {
     try {
-      const res = await fetchAPI('/api/auth/login', { method: 'POST', body: JSON.stringify({ email, password }) });
-      if (res.error) return { user: null, error: new Error(res.error) };
-      setUser(res.user);
-      return { user: res.user, error: null };
-    } catch (err: any) { return { user: null, error: err }; }
+      const res = await fetchAPI('/api/auth/me'); // api.ts จะแนบ header ให้เราอัตโนมัติแล้ว
+      if (res && res.user) setUser(res.user);
+      else setUser(null);
+    } catch (error) {
+      setUser(null);
+    } finally {
+      setLoading(false); 
+    }
   };
 
-  const signUp = async (email: string, password: string) => {
-    try {
-      const res = await fetchAPI('/api/auth/signup', { method: 'POST', body: JSON.stringify({ email, password }) });
-      if (res.error) return { user: null, error: new Error(res.error) };
-      setUser(res.user);
-      return { user: res.user, error: null };
-    } catch (err: any) { return { user: null, error: err }; }
+  const login = (userData: User, token: string) => {
+    localStorage.setItem('auth_token', token); // 💡 บันทึกตั๋วลงเครื่องแบบถาวร (กันรีเฟรชหาย)
+    setUser(userData);
   };
 
-  const signOut = async () => {
-    await fetchAPI('/api/auth/logout', { method: 'POST' });
+  const logout = async () => {
+    localStorage.removeItem('auth_token'); // 💡 ลบตั๋วทิ้ง
+    try {
+      await fetchAPI('/api/auth/logout', { method: 'POST' });
+    } catch (error) {} 
     setUser(null);
+    window.location.href = '/'; 
   };
 
-  return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
-      {children}
-    </AuthContext.Provider>
-  );
+  if (loading) return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="text-gray-500 animate-pulse font-medium">กำลังตรวจสอบสถานะการเข้าสู่ระบบ...</div></div>;
+
+  return <AuthContext.Provider value={{ user, loading, login, logout }}>{children}</AuthContext.Provider>;
 }
 
-export const useAuth = () => {
+export function useAuth() {
   const context = useContext(AuthContext);
-  if (!context) throw new Error('useAuth must be used within AuthProvider');
+  if (context === undefined) throw new Error('useAuth must be used within an AuthProvider');
   return context;
-};
+}

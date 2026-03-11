@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
+import { fetchAPI } from '../lib/api'; // 💡 อย่าลืม import fetchAPI เข้ามาด้วย
 
 type AuthModalProps = {
   isOpen: boolean;
@@ -14,7 +15,8 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   
-  const { signIn, signUp } = useAuth(); // ลบ signInWithGoogle ออกแล้ว
+  // 💡 เปลี่ยนจาก signIn, signUp มาเป็น login
+  const { login } = useAuth(); 
   const navigate = useNavigate();
 
   if (!isOpen) return null;
@@ -23,15 +25,25 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     e.preventDefault();
     setError(null);
     
-    const { user, error: authError } = isLogin 
-      ? await signIn(email, password) 
-      : await signUp(email, password);
+    try {
+      // 💡 ยิง API ไปที่หลังบ้านตรงๆ ตามโหมด (Login หรือ Signup)
+      const endpoint = isLogin ? '/api/auth/login' : '/api/auth/signup';
+      const res = await fetchAPI(endpoint, {
+        method: 'POST',
+        body: JSON.stringify({ email, password })
+      });
 
-    if (authError) {
-      setError(authError.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่');
-    } else {
-      if (user?.role === 'admin') navigate('/admin');
-      onClose();
+      if (res.error) {
+  setError(res.error);
+} else if (res.user && res.token) {
+  // 💡 ส่งข้อมูล user และ token เข้าไปบันทึก
+  login(res.user, res.token);
+  
+  if (res.user.role === 'admin') navigate('/admin');
+  onClose();
+}
+    } catch (err: any) {
+      setError(err.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่');
     }
   };
 

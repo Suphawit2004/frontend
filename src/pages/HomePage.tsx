@@ -36,6 +36,8 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
   const [recommendedPlaces, setRecommendedPlaces] = useState<Place[]>([]);
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
+  
+  // 💡 ดึงสถานะ user มาจาก Context
   const { user } = useAuth();
 
   useEffect(() => {
@@ -52,39 +54,42 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
 
   const loadData = async () => {
     setLoading(true);
-
     try {
-      const [sliders, places, bookmarks] = await Promise.all([
-        fetchAPI('/api/sliders?active=true'),
-        fetchAPI('/api/places?recommended=true&limit=4'),
-        user ? fetchAPI('/api/bookmarks').catch(() => []) : Promise.resolve([]), 
-      ]);
+      // 🟢 1. ดึงข้อมูลสไลด์ (Public - ดึงได้เสมอ)
+      const slidersRes = await fetchAPI('/api/sliders?active=true');
+      if (Array.isArray(slidersRes)) setSliderImages(slidersRes);
+      else if (slidersRes?.data) setSliderImages(slidersRes.data);
 
-      // ✅ เพิ่มการเช็ค Array ก่อนเซ็ตค่าให้ State
-      if (Array.isArray(sliders)) setSliderImages(sliders);
-      else if (sliders?.data && Array.isArray(sliders.data)) setSliderImages(sliders.data);
-      else setSliderImages([]);
-
-      if (Array.isArray(places)) setRecommendedPlaces(places);
-      else if (places?.data && Array.isArray(places.data)) setRecommendedPlaces(places.data);
-      else setRecommendedPlaces([]);
-
-      let bookmarkData = [];
-      if (Array.isArray(bookmarks)) bookmarkData = bookmarks;
-      else if (bookmarks?.data && Array.isArray(bookmarks.data)) bookmarkData = bookmarks.data;
-      
-      setBookmarkedIds(new Set(bookmarkData.map((b: { place_id: string }) => b.place_id)));
+      // 🔴 2. ดึงข้อมูลบุ๊กมาร์ก (Private - ดึงเฉพาะตอนที่ระบบยืนยันแล้วว่าล็อกอินอยู่)
+      // 💡 เปลี่ยนมาเช็คจากตัวแปร user แทนการหา token ดิบๆ ในเครื่อง
+      if (user) { 
+        try {
+          const bookmarksRes = await fetchAPI('/api/bookmarks');
+          const data = Array.isArray(bookmarksRes) ? bookmarksRes : (bookmarksRes?.data || []);
+          
+          const bookmarkSet = new Set<string>(data.map((b: any) => b.id));
+          setBookmarkedIds(bookmarkSet);
+        } catch (bookmarkErr: any) {
+          console.warn('ไม่สามารถดึงข้อมูล Bookmark ได้:', bookmarkErr);
+          // ล้างตั๋วทิ้งถ้าหมดอายุ
+          if (bookmarkErr.message?.includes('Session') || bookmarkErr.message?.includes('401')) {
+            localStorage.removeItem('auth_token');
+          }
+        }
+      } else {
+        // 💡 ถ้าไม่ได้ล็อกอิน ให้กำหนดบุ๊กมาร์กเป็นค่าว่างทันที โดยไม่ต้องส่ง API ไปให้โดนด่า
+        setBookmarkedIds(new Set());
+      }
     } catch (error) {
-      console.error('Error loading home page data:', error);
+      console.error('Failed to load home data:', error);
     } finally {
-      setLoading(false);
+      setLoading(false); 
     }
   };
 
   const loadRecommendedPlaces = async () => {
     try {
       const places = await fetchAPI('/api/places?recommended=true&limit=4');
-      // ✅ เพิ่มการเช็ค Array
       if (Array.isArray(places)) setRecommendedPlaces(places);
       else if (places?.data && Array.isArray(places.data)) setRecommendedPlaces(places.data);
       else setRecommendedPlaces([]);
@@ -97,7 +102,6 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
   const searchPlaces = async (query: string) => {
     try {
       const places = await fetchAPI(`/api/places?search=${encodeURIComponent(query)}&limit=4`);
-      // ✅ เพิ่มการเช็ค Array
       if (Array.isArray(places)) setRecommendedPlaces(places);
       else if (places?.data && Array.isArray(places.data)) setRecommendedPlaces(places.data);
       else setRecommendedPlaces([]);
@@ -139,12 +143,14 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
   if (loading) {
     return (
       <div className="flex items-center justify-center min-h-screen">
-        <div className="text-gray-600">กำลังโหลด...</div>
+        <div className="flex flex-col items-center gap-3">
+          <div className="w-8 h-8 border-4 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+          <div className="text-gray-600 font-medium">กำลังโหลดข้อมูล...</div>
+        </div>
       </div>
     );
   }
 
-  // ✅ ป้องกัน Slider พัง
   const safeSliderImages = Array.isArray(sliderImages) ? sliderImages : [];
 
   return (
@@ -158,7 +164,6 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
           </h2>
         </div>
 
-        {/* ✅ ป้องกัน Error ตอนเช็คความยาวข้อมูล */}
         {!Array.isArray(recommendedPlaces) || recommendedPlaces.length === 0 ? (
           <div className="text-center py-12">
             <p className="text-gray-600">
@@ -168,7 +173,6 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
         ) : (
           <>
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-              {/* ✅ เติม Array.isArray() && ป้องกันก่อน map */}
               {Array.isArray(recommendedPlaces) && recommendedPlaces.map((place) => (
                 <PlaceCard
                   key={place.id}

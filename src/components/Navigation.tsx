@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { Search, User, Menu, X, Compass, Mountain, Coffee, LogOut, Settings } from 'lucide-react';
-import { useNavigate, useLocation } from 'react-router-dom'; // 💡 นำเข้า useNavigate และ useLocation
+import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
 
 type NavigationProps = {
@@ -13,11 +13,11 @@ export function Navigation({ onSearch, onAuthClick }: NavigationProps) {
   const [searchValue, setSearchValue] = useState('');
   const [isProfileOpen, setIsProfileOpen] = useState(false);
   
-  const { user, signOut } = useAuth();
-  const navigate = useNavigate(); // 💡 สร้างฟังก์ชันสำหรับวาร์ปไปหน้าต่างๆ
-  const location = useLocation(); // 💡 ใช้เช็คว่าตอนนี้อยู่ที่หน้าไหน (เพื่อไฮไลท์เมนู)
+  // 💡 แก้ไข 1: เปลี่ยนจาก signOut เป็น logout ให้ตรงกับ AuthContext
+  const { user, logout } = useAuth(); 
+  const navigate = useNavigate(); 
+  const location = useLocation(); 
 
-  // ฟังก์ชันช่วยเช็คหน้าปัจจุบัน
   const isActive = (path: string) => location.pathname === path;
 
   const handleSearch = (e: React.FormEvent) => {
@@ -32,7 +32,7 @@ export function Navigation({ onSearch, onAuthClick }: NavigationProps) {
   ];
 
   const handleNavClick = (path: string) => {
-    navigate(path); // 💡 สั่งเปลี่ยนหน้าไปตาม path
+    navigate(path); 
     setIsMenuOpen(false);
   };
 
@@ -124,7 +124,8 @@ export function Navigation({ onSearch, onAuthClick }: NavigationProps) {
                       )}
 
                       <button
-                        onClick={() => { signOut(); setIsProfileOpen(false); }}
+                        // 💡 แก้ไข 2: เรียกใช้ฟังก์ชัน logout()
+                        onClick={() => { logout(); setIsProfileOpen(false); }}
                         className="w-full flex items-center gap-3 px-4 py-2 text-sm text-red-600 hover:bg-red-50 transition-colors mt-1"
                       >
                         <LogOut className="w-4 h-4" />
