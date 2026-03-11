@@ -14,7 +14,7 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   
-  const { signIn, signUp, signInWithGoogle } = useAuth();
+  const { signIn, signUp } = useAuth(); // ลบ signInWithGoogle ออกแล้ว
   const navigate = useNavigate();
 
   if (!isOpen) return null;
@@ -31,18 +31,6 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
       setError(authError.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่');
     } else {
       if (user?.role === 'admin') navigate('/admin');
-      onClose();
-    }
-  };
-
-  const handleGoogleLogin = async () => {
-    setError(null);
-    const { user, error: googleError } = await signInWithGoogle();
-    
-    if (googleError) {
-      setError('ไม่สามารถเข้าสู่ระบบด้วย Google ได้ กรุณาลองใหม่');
-    } else if (user) {
-      if (user.role === 'admin') navigate('/admin');
       onClose();
     }
   };
@@ -85,19 +73,6 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
             {isLogin ? 'เข้าสู่ระบบ' : 'สมัครสมาชิก'}
           </button>
         </form>
-
-        <div className="relative my-6">
-          <div className="absolute inset-0 flex items-center"><div className="w-full border-t border-gray-200"></div></div>
-          <div className="relative flex justify-center text-sm"><span className="bg-white px-2 text-gray-500">หรือ</span></div>
-        </div>
-
-        <button 
-          onClick={handleGoogleLogin} 
-          className="w-full border border-gray-200 p-3 rounded-xl flex items-center justify-center gap-3 hover:bg-gray-50 transition"
-        >
-          <img src="https://www.google.com/favicon.ico" className="w-5 h-5" alt="Google" />
-          ดำเนินการต่อด้วย Google
-        </button>
 
         <p className="mt-6 text-center text-sm text-gray-600">
           {isLogin ? 'ยังไม่มีบัญชี?' : 'มีบัญชีอยู่แล้ว?'}

@@ -1,34 +1,28 @@
-// src/lib/api.ts
+// เปลี่ยน URL นี้ให้ตรงกับเซิร์ฟเวอร์จริงของคุณเมื่อ Deploy
+export const API_BASE_URL = 'https://nai-dee.tiwsuphawit1.workers.dev'; 
 
-// ✅ แบบที่ถูกต้อง: ไม่ต้องมี / ปิดท้าย
-export const API_BASE_URL = 'https://nai-dee.tiwsuphawit1.workers.dev';
-
-export async function fetchAPI(endpoint: string, options: RequestInit = {}) {
-  // ถ้า endpoint ที่ส่งมาคือ '/api/auth/signup' 
-  // การเขียนแบบด้านล่างจะทำให้ได้ ...workers.dev//api/... (มี / สองอัน)
-  // const url = `${API_BASE_URL}${endpoint}`; 
-
-  // ✨ วิธีแก้ที่ปลอดภัยที่สุด: เช็คและลบ / ที่ซ้ำซ้อน
-  const cleanBaseUrl = API_BASE_URL.endsWith('/') ? API_BASE_URL.slice(0, -1) : API_BASE_URL;
-  const cleanEndpoint = endpoint.startsWith('/') ? endpoint : `/${endpoint}`;
+export const fetchAPI = async (endpoint: string, options: RequestInit = {}) => {
+  // รองรับทั้งการเรียกแบบใส่ / นำหน้าและไม่ใส่
+  const url = endpoint.startsWith('http') ? endpoint : `${API_BASE_URL}${endpoint}`;
   
-  const url = `${cleanBaseUrl}${cleanEndpoint}`;
-  
-  console.log("Calling API:", url); // ใส่ไว้ดูเพื่อความมั่นใจครับ
+  try {
+    const response = await fetch(url, {
+      ...options,
+      credentials: 'include', // 💡 3. สำคัญที่สุด: สั่งให้แนบ Cookie ไปกับทุก Request
+      headers: {
+        'Content-Type': 'application/json',
+        ...options.headers,
+      },
+    });
 
-  const response = await fetch(url, {
-    ...options,
-    headers: {
-      'Content-Type': 'application/json',
-      ...options.headers,
-    },
-    credentials: 'include',
-  });
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(errorData.error || `HTTP error! status: ${response.status}`);
+    }
 
-  if (!response.ok) {
-    const errorData = await response.json().catch(() => ({}));
-    throw new Error(errorData.error || 'เกิดข้อผิดพลาดในการเชื่อมต่อข้อมูล');
+    return await response.json();
+  } catch (error: any) {
+    console.error(`API Fetch Error [${endpoint}]:`, error);
+    return { error: error.message || 'Network error' };
   }
-
-  return response.json();
-}
+};

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
-import { fetchAPI, API_BASE_URL } from '../lib/api';
+import { fetchAPI } from '../lib/api';
 
 export type User = {
   id: string;
@@ -14,7 +14,6 @@ type AuthContextType = {
   loading: boolean;
   signIn: (email: string, password: string) => Promise<{ user: User | null; error: Error | null }>;
   signUp: (email: string, password: string) => Promise<{ user: User | null; error: Error | null }>;
-  signInWithGoogle: () => Promise<{ user: User | null; error: Error | null }>;
   signOut: () => Promise<void>;
 };
 
@@ -49,50 +48,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch (err: any) { return { user: null, error: err }; }
   };
 
-  const signInWithGoogle = () => {
-    return new Promise<{ user: User | null; error: Error | null }>((resolve) => {
-      const width = 500, height = 600;
-      const left = window.screenX + (window.outerWidth - width) / 2;
-      const top = window.screenY + (window.outerHeight - height) / 2;
-      
-      const popup = window.open(
-        `${API_BASE_URL}/api/auth/google`, 
-        'google-auth', 
-        `width=${width},height=${height},left=${left},top=${top}`
-      );
-
-      const handleMessage = async (e: MessageEvent) => {
-        if (e.data === 'google-success') {
-          window.removeEventListener('message', handleMessage);
-          try {
-            const data = await fetchAPI('/api/auth/me');
-            setUser(data.user);
-            resolve({ user: data.user, error: null });
-          } catch (err: any) {
-            resolve({ user: null, error: err });
-          }
-        }
-      };
-
-      window.addEventListener('message', handleMessage);
-
-      // ดักจับกรณีผู้ใช้กดปิด Popup ไปเอง
-      const checkClosed = setInterval(() => {
-        if (popup?.closed) {
-          clearInterval(checkClosed);
-          setTimeout(() => window.removeEventListener('message', handleMessage), 1000);
-        }
-      }, 500);
-    });
-  };
-
   const signOut = async () => {
     await fetchAPI('/api/auth/logout', { method: 'POST' });
     setUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ user, loading, signIn, signUp, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ user, loading, signIn, signUp, signOut }}>
       {children}
     </AuthContext.Provider>
   );

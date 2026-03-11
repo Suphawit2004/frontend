@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { Plus, Trash2, Edit2, Save, X, MapPin } from 'lucide-react'; // 💡 นำเข้า MapPin icon เพิ่ม
+import { Plus, Trash2, Edit2, Save, X, MapPin, Image as ImageIcon } from 'lucide-react'; // 💡 นำเข้า ImageIcon เพิ่ม
 import { useAuth } from '../contexts/AuthContext';
-import { fetchAPI } from '../lib/api';
+import { fetchAPI, API_BASE_URL } from '../lib/api';
 
 export type Place = {
   id: string;
@@ -37,7 +37,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
   const [selectedImage, setSelectedImage] = useState<File | null>(null);
   const [selectedSliderImage, setSelectedSliderImage] = useState<File | null>(null);
   
-  // 💡 State สำหรับจัดการปุ่มโหลดข้อมูล Google
   const [isFetchingGoogle, setIsFetchingGoogle] = useState(false);
 
   const { user } = useAuth();
@@ -71,9 +70,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
     }
   };
 
-  // -----------------------------------------
-  // 💡 ฟังก์ชันดึงข้อมูลจาก Google Maps (ใหม่)
-  // -----------------------------------------
   const handleFetchGoogleData = async () => {
     if (!editingPlace?.map_link) {
       alert('กรุณาวางลิงก์ Google Maps ในช่องก่อนครับ');
@@ -82,7 +78,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
 
     setIsFetchingGoogle(true);
     try {
-      // ⚠️ หมายเหตุ: เราต้องไปสร้าง API เส้นนี้ใน Backend เพื่อเรียก Google Places API
       const response = await fetchAPI(`/api/places/fetch-google?url=${encodeURIComponent(editingPlace.map_link)}`);
       
       if (response && !response.error) {
@@ -99,10 +94,30 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
       }
     } catch (error) {
       console.error('Google Fetch Error:', error);
-      alert('เกิดข้อผิดพลาดในการดึงข้อมูลจาก Google Maps (อย่าลืมสร้าง API ฝั่ง Backend)');
+      alert('เกิดข้อผิดพลาดในการดึงข้อมูลจาก Google Maps');
     } finally {
       setIsFetchingGoogle(false);
     }
+  };
+
+  // -----------------------------------------
+  // 💡 โค้ดใหม่: ฟังก์ชันดึงรูปจากคลังสื่อ (localStorage)
+  // -----------------------------------------
+  const applySelectedImage = (type: 'place' | 'slider') => {
+    const savedUrl = localStorage.getItem('selected_image_url');
+    
+    if (!savedUrl) {
+      alert('ยังไม่มีรูปที่ถูกเลือกจากคลังสื่อ กรุณาไปเลือกรูปในเมนู "คลังสื่อ R2" ก่อนครับ');
+      return;
+    }
+
+    if (type === 'place' && editingPlace) {
+      setEditingPlace({ ...editingPlace, image_url: savedUrl });
+    } else if (type === 'slider' && editingSlider) {
+      setEditingSlider({ ...editingSlider, image_url: savedUrl });
+    }
+    
+    alert('ดึงรูปภาพมาใส่ในฟอร์มสำเร็จ!');
   };
 
   // -----------------------------------------
@@ -124,17 +139,25 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
       if (editingPlace.image_url) formData.append('image_url', editingPlace.image_url);
       if (selectedImage) formData.append('image', selectedImage);
 
-      // ⚠️ อย่าลืมเปลี่ยน 127.0.0.1 ให้เป็น API_BASE_URL ถ้านำไปใช้งานจริง
       const url = editingPlace.id 
-        ? `http://127.0.0.1:8787/api/places/${editingPlace.id}` 
-        : `http://127.0.0.1:8787/api/places`;
+        ? `${API_BASE_URL}/api/places/${editingPlace.id}` 
+        : `${API_BASE_URL}/api/places`;
+        
       const method = editingPlace.id ? 'PUT' : 'POST';
 
-      const response = await fetch(url, { method, body: formData });
-      if (!response.ok) throw new Error('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+      const response = await fetch(url, { 
+        method, 
+        body: formData,
+        credentials: 'include' 
+      });
 
+      if (!response.ok) throw new Error('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
       setEditingPlace(null);
       setSelectedImage(null);
+      
+      // ล้างค่ารูปที่เลือกไว้หลังจากบันทึกเสร็จ (Option)
+      localStorage.removeItem('selected_image_url');
+      
       loadData();
       alert('บันทึกสถานที่สำเร็จ!');
     } catch (error) {
@@ -168,16 +191,25 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
       if (selectedSliderImage) formData.append('image', selectedSliderImage);
 
       const url = editingSlider.id 
-        ? `http://127.0.0.1:8787/api/sliders/${editingSlider.id}` 
-        : `http://127.0.0.1:8787/api/sliders`;
+        ? `${API_BASE_URL}/api/sliders/${editingSlider.id}` 
+        : `${API_BASE_URL}/api/sliders`;
+        
       const method = editingSlider.id ? 'PUT' : 'POST';
 
-      const response = await fetch(url, { method, body: formData });
+      const response = await fetch(url, { 
+        method, 
+        body: formData,
+        credentials: 'include' 
+      });
 
       if (!response.ok) throw new Error('บันทึกไม่สำเร็จ');
 
       setEditingSlider(null);
       setSelectedSliderImage(null);
+      
+      // ล้างค่ารูปที่เลือกไว้หลังจากบันทึกเสร็จ (Option)
+      localStorage.removeItem('selected_image_url');
+      
       loadData();
       alert('บันทึกสไลด์สำเร็จ!');
     } catch (error) {
@@ -225,6 +257,7 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
           </div>
 
           <div className="p-6">
+            {/* ----------------- TAB: PLACES ----------------- */}
             {activeTab === 'places' && (
               <div>
                 <button
@@ -244,7 +277,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                     
                     <div className="grid grid-cols-2 gap-4 mb-4">
                       
-                      {/* 💡 ส่วนดึงข้อมูลอัตโนมัติจาก Google (ย้ายลิงก์ Map มาไว้ด้านบน) */}
                       <div className="col-span-2 p-4 bg-blue-50 border border-blue-100 rounded-lg flex gap-2 items-end">
                         <div className="flex-1">
                           <label className="block text-sm font-medium text-blue-800 mb-1">Google Maps Link (เพื่อดึงข้อมูลอัตโนมัติ)</label>
@@ -267,14 +299,39 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                         </button>
                       </div>
 
-                      <input type="text" placeholder="ชื่อสถานที่" value={editingPlace.name || ''} onChange={(e) => setEditingPlace({ ...editingPlace, name: e.target.value })} className="px-3 py-2 border rounded-lg" />
+                      <input type="text" placeholder="ชื่อสถานที่" value={editingPlace.name || ''} onChange={(e) => setEditingPlace({ ...editingPlace, name: e.target.value })} className="px-3 py-2 border rounded-lg col-span-2 md:col-span-1" />
                       
-                      <div className="flex flex-col">
-                        <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.length) setSelectedImage(e.target.files[0]); }} className="px-3 py-2 border rounded-lg bg-white" />
+                      {/* 💡 โค้ดใหม่: ส่วนจัดการรูปภาพ Places */}
+                      <div className="col-span-2 md:col-span-1 border rounded-lg p-3 bg-white flex flex-col gap-2">
+                        <label className="text-sm font-medium text-gray-700">รูปภาพสถานที่</label>
+                        
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            placeholder="URL รูปภาพ..." 
+                            value={editingPlace.image_url || ''} 
+                            onChange={(e) => setEditingPlace({ ...editingPlace, image_url: e.target.value })} 
+                            className="flex-1 px-3 py-1.5 border rounded outline-none text-sm" 
+                          />
+                          <button 
+                            type="button" 
+                            onClick={() => applySelectedImage('place')}
+                            className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded text-sm font-medium whitespace-nowrap flex items-center gap-1 transition-colors"
+                          >
+                            <ImageIcon className="w-4 h-4" /> ดึงรูปจากคลัง
+                          </button>
+                        </div>
+
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-gray-500 w-full text-center">--- หรืออัปโหลดไฟล์ใหม่ ---</span>
+                        </div>
+                        
+                        <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.length) setSelectedImage(e.target.files[0]); }} className="text-sm" />
+                        
                         {editingPlace.image_url && !selectedImage && (
-                          <div className="mt-2 text-sm text-gray-500 flex items-center">
+                          <div className="mt-2 text-sm text-gray-500 flex items-center bg-gray-50 p-2 rounded">
                             <span className="mr-2">รูปปัจจุบัน:</span>
-                            <img src={editingPlace.image_url} alt="Current" className="h-10 w-10 object-cover rounded" />
+                            <img src={editingPlace.image_url} alt="Current" className="h-10 w-10 object-cover rounded shadow-sm" />
                           </div>
                         )}
                       </div>
@@ -325,8 +382,8 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
               </div>
             )}
 
+            {/* ----------------- TAB: SLIDERS ----------------- */}
             {activeTab === 'slider' && (
-              // ... โค้ดส่วน Slider คงเดิมทั้งหมด
               <div>
                 <button
                   onClick={() => { setEditingSlider({ image_url: '', is_active: true }); setSelectedSliderImage(null); }}
@@ -339,13 +396,42 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                   <div className="bg-gray-50 p-6 rounded-lg mb-6 border border-gray-200">
                     <h3 className="text-lg font-semibold mb-4">{editingSlider.id ? 'แก้ไขภาพสไลด์' : 'เพิ่มภาพสไลด์ใหม่'}</h3>
                     <div className="space-y-4 mb-4">
-                      <div className="flex flex-col">
-                        <label className="text-sm font-medium text-gray-700 mb-1">เลือกรูปภาพสไลด์</label>
-                        <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.length) setSelectedSliderImage(e.target.files[0]); }} className="w-full px-3 py-2 border rounded-lg bg-white" />
+                      
+                      {/* 💡 โค้ดใหม่: ส่วนจัดการรูปภาพ Sliders */}
+                      <div className="flex flex-col border rounded-lg p-3 bg-white gap-2">
+                        <label className="text-sm font-medium text-gray-700">รูปภาพสไลด์</label>
+                        
+                        <div className="flex gap-2">
+                          <input 
+                            type="text" 
+                            placeholder="URL รูปภาพ..." 
+                            value={editingSlider.image_url || ''} 
+                            onChange={(e) => setEditingSlider({ ...editingSlider, image_url: e.target.value })} 
+                            className="flex-1 px-3 py-1.5 border rounded outline-none text-sm" 
+                          />
+                          <button 
+                            type="button" 
+                            onClick={() => applySelectedImage('slider')}
+                            className="bg-emerald-100 text-emerald-700 hover:bg-emerald-200 px-3 py-1.5 rounded text-sm font-medium whitespace-nowrap flex items-center gap-1 transition-colors"
+                          >
+                            <ImageIcon className="w-4 h-4" /> ดึงรูปจากคลัง
+                          </button>
+                        </div>
+                        
+                        <div className="flex items-center gap-2 mt-1">
+                          <span className="text-xs text-gray-500 w-full text-center">--- หรืออัปโหลดไฟล์ใหม่ ---</span>
+                        </div>
+
+                        <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.length) setSelectedSliderImage(e.target.files[0]); }} className="text-sm" />
+                        
                         {editingSlider.image_url && !selectedSliderImage && (
-                          <div className="mt-2 text-sm text-gray-500 flex items-center"><span className="mr-2">รูปปัจจุบัน:</span><img src={editingSlider.image_url} alt="Current Slider" className="h-16 w-24 object-cover rounded shadow-sm" /></div>
+                          <div className="mt-2 text-sm text-gray-500 flex items-center bg-gray-50 p-2 rounded">
+                            <span className="mr-2">รูปปัจจุบัน:</span>
+                            <img src={editingSlider.image_url} alt="Current Slider" className="h-16 w-24 object-cover rounded shadow-sm" />
+                          </div>
                         )}
                       </div>
+
                       <input type="text" placeholder="ชื่อ (ไม่บังคับ)" value={editingSlider.title || ''} onChange={(e) => setEditingSlider({ ...editingSlider, title: e.target.value })} className="w-full px-3 py-2 border rounded-lg" />
                       <label className="flex items-center cursor-pointer"><input type="checkbox" checked={editingSlider.is_active !== false} onChange={(e) => setEditingSlider({ ...editingSlider, is_active: e.target.checked })} className="mr-2 w-4 h-4 text-blue-600" />แสดง</label>
                     </div>
