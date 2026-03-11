@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X } from 'lucide-react';
-import { useAuth } from '../contexts/AuthContext'; // ดึง Hook จากไฟล์หลัก
+import { useNavigate } from 'react-router-dom'; // 💡 1. เพิ่มการนำเข้า useNavigate
+import { useAuth } from '../contexts/AuthContext';
 
 type AuthModalProps = {
   isOpen: boolean;
@@ -13,7 +14,13 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   
-  const { signIn, signUp, signInWithGoogle } = useAuth(); // เรียกใช้ Logic จาก Context
+  const { signIn, signUp, signInWithGoogle } = useAuth();
+  
+  // 💡 2. เรียกใช้งานฟังก์ชันนำทาง
+  const navigate = useNavigate();
+
+  // ⚙️ ตัวแปรสำหรับกำหนดอีเมลของ Admin (สามารถเปลี่ยนเป็นอีเมลของคุณได้เลย)
+  const ADMIN_EMAIL = 'admin@example.com';
 
   if (!isOpen) return null;
 
@@ -28,7 +35,11 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (result.error) {
       setError(result.error.message || 'เกิดข้อผิดพลาด กรุณาลองใหม่');
     } else {
-      onClose();
+      // 💡 3. ตรวจสอบว่าเป็น Admin หรือไม่
+      if (email === ADMIN_EMAIL) {
+        navigate('/admin'); // เด้งไปหน้า Admin
+      }
+      onClose(); // ปิด Modal
     }
   };
 
@@ -37,6 +48,10 @@ export function AuthModal({ isOpen, onClose }: AuthModalProps) {
     if (result.error) {
       setError(result.error instanceof Error ? result.error.message : 'Google Login Failed');
     } else {
+      // 💡 ถ้าคุณอยากให้ตรวจเช็ค Admin ผ่าน Google Login ด้วย 
+      // คุณอาจจะต้องดึงข้อมูล user จาก result มาตรวจสอบครับ เช่น
+      // if (result.user?.email === ADMIN_EMAIL) { navigate('/admin'); }
+      
       onClose();
     }
   };

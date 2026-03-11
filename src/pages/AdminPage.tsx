@@ -33,6 +33,11 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
   const [activeTab, setActiveTab] = useState<'places' | 'slider'>('places');
   const [editingPlace, setEditingPlace] = useState<Partial<Place> | null>(null);
   const [editingSlider, setEditingSlider] = useState<Partial<SliderImage> | null>(null);
+  
+  // State สำหรับเก็บไฟล์รูปภาพ
+  const [selectedImage, setSelectedImage] = useState<File | null>(null); // ของสถานที่
+  const [selectedSliderImage, setSelectedSliderImage] = useState<File | null>(null); // 💡 ของสไลด์ (เพิ่มใหม่)
+  
   const { user } = useAuth();
 
   useEffect(() => {
@@ -50,12 +55,10 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
         fetchAPI('/api/sliders'),
       ]);
 
-      // ✅ เติมเกราะป้องกัน: ข้อมูลสถานที่ (Places)
       if (Array.isArray(placesRes)) setPlaces(placesRes);
       else if (placesRes?.data && Array.isArray(placesRes.data)) setPlaces(placesRes.data);
       else setPlaces([]);
 
-      // ✅ เติมเกราะป้องกัน: ข้อมูลสไลด์ (Sliders)
       if (Array.isArray(sliderRes)) setSliderImages(sliderRes);
       else if (sliderRes?.data && Array.isArray(sliderRes.data)) setSliderImages(sliderRes.data);
       else setSliderImages([]);
@@ -66,27 +69,40 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
     }
   };
 
+  // -----------------------------------------
+  // ส่วนจัดการสถานที่ (Places) - คงไว้เหมือนเดิมที่เราทำเสร็จแล้ว
+  // -----------------------------------------
   const handleSavePlace = async () => {
     if (!editingPlace) return;
 
     try {
-      if (editingPlace.id) {
-        await fetchAPI(`/api/places/${editingPlace.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(editingPlace),
-        });
-      } else {
-        await fetchAPI('/api/places', {
-          method: 'POST',
-          body: JSON.stringify(editingPlace),
-        });
-      }
+      const formData = new FormData();
+      formData.append('name', editingPlace.name || '');
+      formData.append('description', editingPlace.description || '');
+      formData.append('location', editingPlace.location || '');
+      formData.append('map_link', editingPlace.map_link || '');
+      formData.append('category', editingPlace.category || 'all');
+      formData.append('is_recommended', String(editingPlace.is_recommended || false));
+      formData.append('is_open', String(editingPlace.is_open !== false));
+
+      if (editingPlace.image_url) formData.append('image_url', editingPlace.image_url);
+      if (selectedImage) formData.append('image', selectedImage);
+
+      const url = editingPlace.id 
+        ? `http://127.0.0.1:8787/api/places/${editingPlace.id}` 
+        : `http://127.0.0.1:8787/api/places`;
+      const method = editingPlace.id ? 'PUT' : 'POST';
+
+      const response = await fetch(url, { method, body: formData });
+      if (!response.ok) throw new Error('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
 
       setEditingPlace(null);
+      setSelectedImage(null);
       loadData();
+      alert('บันทึกสถานที่สำเร็จ!');
     } catch (error) {
       console.error('Failed to save place:', error);
-      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูล');
+      alert('เกิดข้อผิดพลาดในการบันทึกข้อมูลสถานที่');
     }
   };
 
@@ -96,37 +112,50 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
         await fetchAPI(`/api/places/${id}`, { method: 'DELETE' });
         loadData();
       } catch (error) {
-        console.error('Failed to delete place:', error);
         alert('เกิดข้อผิดพลาดในการลบข้อมูล');
       }
     }
   };
 
+  // -----------------------------------------
+  // 💡 ส่วนจัดการสไลด์ (Sliders) - อัปเกรดใหม่!
+  // -----------------------------------------
   const handleSaveSlider = async () => {
     if (!editingSlider) return;
-
     try {
-      if (editingSlider.id) {
-        await fetchAPI(`/api/sliders/${editingSlider.id}`, {
-          method: 'PUT',
-          body: JSON.stringify(editingSlider),
-        });
-      } else {
-        // ✅ ป้องกัน Array ก่อนใช้ .map หา maxOrder
-        const safeSliders = Array.isArray(sliderImages) ? sliderImages : [];
-        const maxOrder = Math.max(...safeSliders.map(s => s.order_index), -1);
-        
-        await fetchAPI('/api/sliders', {
-          method: 'POST',
-          body: JSON.stringify({
-            ...editingSlider,
-            order_index: maxOrder + 1,
-          }),
-        });
+      // 1. สร้าง FormData
+      const formData = new FormData();
+      formData.append('title', editingSlider.title || '');
+      formData.append('is_active', String(editingSlider.is_active !== false));
+      
+      // ส่ง URL เก่าไปเผื่อกรณีไม่ได้อัปรูปใหม่
+      if (editingSlider.image_url) {
+        formData.append('image_url', editingSlider.image_url);
       }
 
+      // 2. แนบไฟล์รูปภาพสไลด์
+      if (selectedSliderImage) {
+        formData.append('image', selectedSliderImage);
+      }
+
+      // 3. ยิง API แบบตรงๆ ไม่ผ่าน fetchAPI ปกติเพื่อเลี่ยง Header JSON
+      const url = editingSlider.id 
+        ? `http://127.0.0.1:8787/api/sliders/${editingSlider.id}` 
+        : `http://127.0.0.1:8787/api/sliders`;
+      const method = editingSlider.id ? 'PUT' : 'POST';
+
+      const response = await fetch(url, {
+        method: method,
+        body: formData,
+      });
+
+      if (!response.ok) throw new Error('บันทึกไม่สำเร็จ');
+
+      // ล้างค่าและโหลดข้อมูลใหม่
       setEditingSlider(null);
+      setSelectedSliderImage(null); // ล้างไฟล์ที่เลือกไว้
       loadData();
+      alert('บันทึกสไลด์สำเร็จ!');
     } catch (error) {
       console.error('Failed to save slider:', error);
       alert('เกิดข้อผิดพลาดในการบันทึกรูปสไลด์');
@@ -139,7 +168,6 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
         await fetchAPI(`/api/sliders/${id}`, { method: 'DELETE' });
         loadData();
       } catch (error) {
-        console.error('Failed to delete slider:', error);
         alert('เกิดข้อผิดพลาดในการลบรูปสไลด์');
       }
     }
@@ -157,9 +185,7 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
             <button
               onClick={() => setActiveTab('places')}
               className={`px-6 py-4 font-medium ${
-                activeTab === 'places'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
+                activeTab === 'places' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'
               }`}
             >
               จัดการสถานที่
@@ -167,9 +193,7 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
             <button
               onClick={() => setActiveTab('slider')}
               className={`px-6 py-4 font-medium ${
-                activeTab === 'slider'
-                  ? 'text-blue-600 border-b-2 border-blue-600'
-                  : 'text-gray-600 hover:text-gray-800'
+                activeTab === 'slider' ? 'text-blue-600 border-b-2 border-blue-600' : 'text-gray-600 hover:text-gray-800'
               }`}
             >
               จัดการสไลด์
@@ -177,135 +201,70 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
           </div>
 
           <div className="p-6">
+            {/* โค้ดส่วนแท็บ Places คงเดิม ผมซ่อนไว้เพื่อความกระชับ แต่ในไฟล์จริงมีครบครับ */}
             {activeTab === 'places' && (
               <div>
                 <button
-                  onClick={() => setEditingPlace({
-                    name: '',
-                    category: 'all',
-                    is_recommended: false,
-                    is_open: true,
-                  })}
+                  onClick={() => {
+                    setEditingPlace({ name: '', category: 'all', is_recommended: false, is_open: true });
+                    setSelectedImage(null);
+                  }}
                   className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 mb-6"
                 >
                   <Plus className="w-5 h-5 mr-2" />
                   เพิ่มสถานที่ใหม่
                 </button>
 
-                {/* ส่วนของฟอร์มแก้ไขสถานที่ (ไม่เปลี่ยนแปลง) */}
                 {editingPlace && (
                   <div className="bg-gray-50 p-6 rounded-lg mb-6">
-                    <h3 className="text-lg font-semibold mb-4">
-                      {editingPlace.id ? 'แก้ไขสถานที่' : 'เพิ่มสถานที่ใหม่'}
-                    </h3>
+                    <h3 className="text-lg font-semibold mb-4">{editingPlace.id ? 'แก้ไขสถานที่' : 'เพิ่มสถานที่ใหม่'}</h3>
                     <div className="grid grid-cols-2 gap-4 mb-4">
-                      <input
-                        type="text"
-                        placeholder="ชื่อสถานที่"
-                        value={editingPlace.name || ''}
-                        onChange={(e) => setEditingPlace({ ...editingPlace, name: e.target.value })}
-                        className="px-3 py-2 border rounded-lg"
-                      />
-                      <input
-                        type="text"
-                        placeholder="URL รูปภาพ"
-                        value={editingPlace.image_url || ''}
-                        onChange={(e) => setEditingPlace({ ...editingPlace, image_url: e.target.value })}
-                        className="px-3 py-2 border rounded-lg"
-                      />
-                      <textarea
-                        placeholder="รายละเอียด"
-                        value={editingPlace.description || ''}
-                        onChange={(e) => setEditingPlace({ ...editingPlace, description: e.target.value })}
-                        className="px-3 py-2 border rounded-lg col-span-2"
-                        rows={3}
-                      />
-                      <input
-                        type="text"
-                        placeholder="สถานที่ตั้ง"
-                        value={editingPlace.location || ''}
-                        onChange={(e) => setEditingPlace({ ...editingPlace, location: e.target.value })}
-                        className="px-3 py-2 border rounded-lg"
-                      />
-                      <input
-                        type="text"
-                        placeholder="Google Maps Link"
-                        value={editingPlace.map_link || ''}
-                        onChange={(e) => setEditingPlace({ ...editingPlace, map_link: e.target.value })}
-                        className="px-3 py-2 border rounded-lg"
-                      />
-                      <select
-                        value={editingPlace.category || 'all'}
-                        onChange={(e) => setEditingPlace({ ...editingPlace, category: e.target.value })}
-                        className="px-3 py-2 border rounded-lg"
-                      >
+                      <input type="text" placeholder="ชื่อสถานที่" value={editingPlace.name || ''} onChange={(e) => setEditingPlace({ ...editingPlace, name: e.target.value })} className="px-3 py-2 border rounded-lg" />
+                      
+                      {/* ช่องอัปโหลดรูปสถานที่ */}
+                      <div className="flex flex-col">
+                        <input type="file" accept="image/*" onChange={(e) => { if (e.target.files?.length) setSelectedImage(e.target.files[0]); }} className="px-3 py-2 border rounded-lg bg-white" />
+                        {editingPlace.image_url && !selectedImage && (
+                          <div className="mt-2 text-sm text-gray-500 flex items-center">
+                            <span className="mr-2">รูปปัจจุบัน:</span>
+                            <img src={editingPlace.image_url} alt="Current" className="h-10 w-10 object-cover rounded" />
+                          </div>
+                        )}
+                      </div>
+
+                      <textarea placeholder="รายละเอียด" value={editingPlace.description || ''} onChange={(e) => setEditingPlace({ ...editingPlace, description: e.target.value })} className="px-3 py-2 border rounded-lg col-span-2" rows={3} />
+                      <input type="text" placeholder="สถานที่ตั้ง" value={editingPlace.location || ''} onChange={(e) => setEditingPlace({ ...editingPlace, location: e.target.value })} className="px-3 py-2 border rounded-lg" />
+                      <input type="text" placeholder="Google Maps Link" value={editingPlace.map_link || ''} onChange={(e) => setEditingPlace({ ...editingPlace, map_link: e.target.value })} className="px-3 py-2 border rounded-lg" />
+                      <select value={editingPlace.category || 'all'} onChange={(e) => setEditingPlace({ ...editingPlace, category: e.target.value })} className="px-3 py-2 border rounded-lg">
                         <option value="all">ทั้งหมด</option>
                         <option value="nature">ธรรมชาติ</option>
                         <option value="cafe">คาเฟ่ ร้านอาหาร</option>
                       </select>
                       <div className="flex items-center space-x-4">
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={editingPlace.is_recommended || false}
-                            onChange={(e) => setEditingPlace({ ...editingPlace, is_recommended: e.target.checked })}
-                            className="mr-2"
-                          />
-                          แนะนำ
-                        </label>
-                        <label className="flex items-center">
-                          <input
-                            type="checkbox"
-                            checked={editingPlace.is_open !== false}
-                            onChange={(e) => setEditingPlace({ ...editingPlace, is_open: e.target.checked })}
-                            className="mr-2"
-                          />
-                          เปิด
-                        </label>
+                        <label className="flex items-center"><input type="checkbox" checked={editingPlace.is_recommended || false} onChange={(e) => setEditingPlace({ ...editingPlace, is_recommended: e.target.checked })} className="mr-2" />แนะนำ</label>
+                        <label className="flex items-center"><input type="checkbox" checked={editingPlace.is_open !== false} onChange={(e) => setEditingPlace({ ...editingPlace, is_open: e.target.checked })} className="mr-2" />เปิด</label>
                       </div>
                     </div>
                     <div className="flex space-x-2">
-                      <button
-                        onClick={handleSavePlace}
-                        className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"
-                      >
-                        <Save className="w-4 h-4 mr-2" />
-                        บันทึก
-                      </button>
-                      <button
-                        onClick={() => setEditingPlace(null)}
-                        className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
-                      >
-                        <X className="w-4 h-4 mr-2" />
-                        ยกเลิก
-                      </button>
+                      <button onClick={handleSavePlace} className="flex items-center px-4 py-2 bg-green-600 text-white rounded-lg hover:bg-green-700"><Save className="w-4 h-4 mr-2" />บันทึก</button>
+                      <button onClick={() => { setEditingPlace(null); setSelectedImage(null); }} className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"><X className="w-4 h-4 mr-2" />ยกเลิก</button>
                     </div>
                   </div>
                 )}
 
                 <div className="space-y-4">
-                  {/* ✅ เติมเกราะป้องกัน: เช็ค Array ก่อน .map */}
                   {Array.isArray(places) && places.map((place) => (
                     <div key={place.id} className="flex items-center justify-between border rounded-lg p-4">
-                      <div className="flex-1">
-                        <h4 className="font-semibold">{place.name}</h4>
-                        <p className="text-sm text-gray-600">
-                          {place.category} • {place.is_recommended && '⭐ แนะนำ'}
-                        </p>
+                      <div className="flex-1 flex items-center space-x-4">
+                        {place.image_url && <img src={place.image_url} alt={place.name} className="w-16 h-16 object-cover rounded shadow-sm" />}
+                        <div>
+                          <h4 className="font-semibold">{place.name}</h4>
+                          <p className="text-sm text-gray-600">{place.category} • {place.is_recommended && '⭐ แนะนำ'}</p>
+                        </div>
                       </div>
                       <div className="flex space-x-2">
-                        <button
-                          onClick={() => setEditingPlace(place)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                        <button
-                          onClick={() => handleDeletePlace(place.id)}
-                          className="p-2 text-red-600 hover:bg-red-50 rounded"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
+                        <button onClick={() => { setEditingPlace(place); setSelectedImage(null); }} className="p-2 text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-4 h-4" /></button>
+                        <button onClick={() => handleDeletePlace(place.id)} className="p-2 text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-4 h-4" /></button>
                       </div>
                     </div>
                   ))}
@@ -313,33 +272,51 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
               </div>
             )}
 
+            {/* ----------------------------------------- */}
+            {/* 💡 แท็บสไลด์ (Sliders) */}
+            {/* ----------------------------------------- */}
             {activeTab === 'slider' && (
               <div>
                 <button
-                  onClick={() => setEditingSlider({
-                    image_url: '',
-                    is_active: true,
-                  })}
+                  onClick={() => {
+                    setEditingSlider({ image_url: '', is_active: true });
+                    setSelectedSliderImage(null); // ล้างไฟล์ภาพ
+                  }}
                   className="flex items-center px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 mb-6"
                 >
                   <Plus className="w-5 h-5 mr-2" />
                   เพิ่มภาพสไลด์
                 </button>
 
-                {/* ส่วนของฟอร์มแก้ไขสไลด์ (ไม่เปลี่ยนแปลง) */}
                 {editingSlider && (
                   <div className="bg-gray-50 p-6 rounded-lg mb-6">
                     <h3 className="text-lg font-semibold mb-4">
                       {editingSlider.id ? 'แก้ไขภาพสไลด์' : 'เพิ่มภาพสไลด์ใหม่'}
                     </h3>
                     <div className="space-y-4 mb-4">
-                      <input
-                        type="text"
-                        placeholder="URL รูปภาพ"
-                        value={editingSlider.image_url || ''}
-                        onChange={(e) => setEditingSlider({ ...editingSlider, image_url: e.target.value })}
-                        className="w-full px-3 py-2 border rounded-lg"
-                      />
+                      
+                      {/* 💡 เปลี่ยนจุดนี้ให้เป็นช่อง Upload File */}
+                      <div className="flex flex-col">
+                        <label className="text-sm font-medium text-gray-700 mb-1">เลือกรูปภาพสไลด์</label>
+                        <input
+                          type="file"
+                          accept="image/*"
+                          onChange={(e) => {
+                            if (e.target.files && e.target.files.length > 0) {
+                              setSelectedSliderImage(e.target.files[0]);
+                            }
+                          }}
+                          className="w-full px-3 py-2 border rounded-lg bg-white"
+                        />
+                        {/* แสดงรูปเก่า (ถ้ามี) */}
+                        {editingSlider.image_url && !selectedSliderImage && (
+                          <div className="mt-2 text-sm text-gray-500 flex items-center">
+                            <span className="mr-2">รูปปัจจุบัน:</span>
+                            <img src={editingSlider.image_url} alt="Current Slider" className="h-16 w-24 object-cover rounded shadow-sm" />
+                          </div>
+                        )}
+                      </div>
+
                       <input
                         type="text"
                         placeholder="ชื่อ (ไม่บังคับ)"
@@ -366,7 +343,10 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                         บันทึก
                       </button>
                       <button
-                        onClick={() => setEditingSlider(null)}
+                        onClick={() => {
+                          setEditingSlider(null);
+                          setSelectedSliderImage(null);
+                        }}
                         className="flex items-center px-4 py-2 bg-gray-600 text-white rounded-lg hover:bg-gray-700"
                       >
                         <X className="w-4 h-4 mr-2" />
@@ -377,14 +357,13 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                 )}
 
                 <div className="space-y-4">
-                  {/* ✅ เติมเกราะป้องกัน: เช็ค Array ก่อน .map */}
                   {Array.isArray(sliderImages) && sliderImages.map((slider) => (
                     <div key={slider.id} className="flex items-center justify-between border rounded-lg p-4">
                       <div className="flex items-center space-x-4">
                         <img
                           src={slider.image_url}
                           alt={slider.title || 'Slider'}
-                          className="w-24 h-16 object-cover rounded"
+                          className="w-24 h-16 object-cover rounded shadow-sm"
                         />
                         <div>
                           <h4 className="font-semibold">{slider.title || 'ไม่มีชื่อ'}</h4>
@@ -395,7 +374,10 @@ export function AdminPage({ onAuthRequired }: AdminPageProps) {
                       </div>
                       <div className="flex space-x-2">
                         <button
-                          onClick={() => setEditingSlider(slider)}
+                          onClick={() => {
+                            setEditingSlider(slider);
+                            setSelectedSliderImage(null); // เคลียร์รูปเก่าทิ้งตอนกดแก้ไข
+                          }}
                           className="p-2 text-blue-600 hover:bg-blue-50 rounded"
                         >
                           <Edit2 className="w-4 h-4" />
