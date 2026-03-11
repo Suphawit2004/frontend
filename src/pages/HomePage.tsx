@@ -37,7 +37,6 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
   const [bookmarkedIds, setBookmarkedIds] = useState<Set<string>>(new Set());
   const [loading, setLoading] = useState(true);
   
-  // 💡 ดึงสถานะ user มาจาก Context
   const { user } = useAuth();
 
   useEffect(() => {
@@ -55,35 +54,35 @@ export function HomePage({ onPlaceClick, onMorePlacesClick, onAuthRequired, sear
   const loadData = async () => {
     setLoading(true);
     try {
-      // 🟢 1. ดึงข้อมูลสไลด์ (Public - ดึงได้เสมอ)
+      // 🟢 1. ดึงข้อมูลสไลด์ (Public)
       const slidersRes = await fetchAPI('/api/sliders?active=true');
       if (Array.isArray(slidersRes)) setSliderImages(slidersRes);
       else if (slidersRes?.data) setSliderImages(slidersRes.data);
 
-      // 🔴 2. ดึงข้อมูลบุ๊กมาร์ก (Private - ดึงเฉพาะตอนที่ระบบยืนยันแล้วว่าล็อกอินอยู่)
-      // 💡 เปลี่ยนมาเช็คจากตัวแปร user แทนการหา token ดิบๆ ในเครื่อง
+      // 🔴 2. ดึงข้อมูลบุ๊กมาร์ก (Private)
+      // 💡 เช็คจาก user เพื่อความชัวร์ว่าล็อกอินจริงๆ
       if (user) { 
         try {
           const bookmarksRes = await fetchAPI('/api/bookmarks');
           const data = Array.isArray(bookmarksRes) ? bookmarksRes : (bookmarksRes?.data || []);
           
+          // 💡 แปลง Array เป็น Set เพื่อให้ตรงกับ State bookmarkedIds ของคุณ
           const bookmarkSet = new Set<string>(data.map((b: any) => b.id));
           setBookmarkedIds(bookmarkSet);
         } catch (bookmarkErr: any) {
           console.warn('ไม่สามารถดึงข้อมูล Bookmark ได้:', bookmarkErr);
-          // ล้างตั๋วทิ้งถ้าหมดอายุ
-          if (bookmarkErr.message?.includes('Session') || bookmarkErr.message?.includes('401')) {
+          // ล้างตั๋วทิ้งถ้าหมดอายุ เพื่อไม่ให้ Console แดงค้าง
+          if (bookmarkErr.message?.includes('401') || bookmarkErr.message?.includes('Session')) {
             localStorage.removeItem('auth_token');
           }
         }
       } else {
-        // 💡 ถ้าไม่ได้ล็อกอิน ให้กำหนดบุ๊กมาร์กเป็นค่าว่างทันที โดยไม่ต้องส่ง API ไปให้โดนด่า
         setBookmarkedIds(new Set());
       }
     } catch (error) {
       console.error('Failed to load home data:', error);
     } finally {
-      setLoading(false); 
+      setLoading(false); // 💡 ต้องปิด loading ตรงนี้เพื่อให้หน้าเว็บแสดงผล
     }
   };
 
